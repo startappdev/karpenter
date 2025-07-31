@@ -1,0 +1,77 @@
+{{- if .Values.webhook.enabled }}
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingWebhookConfiguration
+metadata:
+  name: {{ include "karpenter-oci.fullname" . }}-validation
+  labels:
+    {{- include "karpenter-oci.labels" . | nindent 4 }}
+webhooks:
+  - name: validation.nodepools.karpenter.sh
+    clientConfig:
+      service:
+        name: {{ include "karpenter-oci.fullname" . }}
+        namespace: {{ .Release.Namespace }}
+        path: "/validate-karpenter-sh-v1-nodepool"
+    failurePolicy: Fail
+    admissionReviewVersions: ["v1", "v1beta1"]
+    sideEffects: None
+    rules:
+      - apiGroups: ["karpenter.sh"]
+        apiVersions: ["v1"]
+        operations: ["CREATE", "UPDATE"]
+        resources: ["nodepools"]
+        scope: "*"
+  - name: validation.nodeclaims.karpenter.sh
+    clientConfig:
+      service:
+        name: {{ include "karpenter-oci.fullname" . }}
+        namespace: {{ .Release.Namespace }}
+        path: "/validate-karpenter-sh-v1-nodeclaim"
+    failurePolicy: Fail
+    admissionReviewVersions: ["v1", "v1beta1"]
+    sideEffects: None
+    rules:
+      - apiGroups: ["karpenter.sh"]
+        apiVersions: ["v1"]
+        operations: ["CREATE", "UPDATE"]
+        resources: ["nodeclaims"]
+        scope: "*"
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: MutatingWebhookConfiguration
+metadata:
+  name: {{ include "karpenter-oci.fullname" . }}-mutation
+  labels:
+    {{- include "karpenter-oci.labels" . | nindent 4 }}
+webhooks:
+  - name: mutation.nodepools.karpenter.sh
+    clientConfig:
+      service:
+        name: {{ include "karpenter-oci.fullname" . }}
+        namespace: {{ .Release.Namespace }}
+        path: "/mutate-karpenter-sh-v1-nodepool"
+    failurePolicy: Fail
+    admissionReviewVersions: ["v1", "v1beta1"]
+    sideEffects: None
+    rules:
+      - apiGroups: ["karpenter.sh"]
+        apiVersions: ["v1"]
+        operations: ["CREATE", "UPDATE"]
+        resources: ["nodepools"]
+        scope: "*"
+  - name: mutation.nodeclaims.karpenter.sh
+    clientConfig:
+      service:
+        name: {{ include "karpenter-oci.fullname" . }}
+        namespace: {{ .Release.Namespace }}
+        path: "/mutate-karpenter-sh-v1-nodeclaim"
+    failurePolicy: Fail
+    admissionReviewVersions: ["v1", "v1beta1"]
+    sideEffects: None
+    rules:
+      - apiGroups: ["karpenter.sh"]
+        apiVersions: ["v1"]
+        operations: ["CREATE", "UPDATE"]
+        resources: ["nodeclaims"]
+        scope: "*"
+{{- end }}

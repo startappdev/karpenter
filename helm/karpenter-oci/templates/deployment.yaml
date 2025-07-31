@@ -1,0 +1,115 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "karpenter-oci.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "karpenter-oci.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "karpenter-oci.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      annotations:
+        checksum/settings: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      labels:
+        {{- include "karpenter-oci.selectorLabels" . | nindent 8 }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "karpenter-oci.serviceAccountName" . }}
+      {{- if .Values.priorityClassName }}
+      priorityClassName: {{ .Values.priorityClassName }}
+      {{- end }}
+      dnsPolicy: {{ .Values.dnsPolicy }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: controller
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          image: {{ include "karpenter-oci.image" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args:
+            - --v={{ .Values.settings.logLevel }}
+            - --config=/config/settings
+          env:
+            {{- with .Values.controller.env }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+            - name: CLUSTER_NAME
+              value: {{ required "settings.clusterName is required" .Values.settings.clusterName }}
+            - name: OCI_REGION
+              value: {{ required "oci.region is required" .Values.oci.region }}
+            - name: OCI_COMPARTMENT_ID
+              value: {{ required "oci.compartmentId is required" .Values.oci.compartmentId }}
+            - name: OCI_CLUSTER_ID
+              value: {{ required "oci.clusterId is required" .Values.oci.clusterId }}
+            {{- if .Values.oci.subnetIds }}
+            - name: OCI_SUBNET_IDS
+              value: {{ join "," .Values.oci.subnetIds }}
+            {{- end }}
+            {{- if .Values.oci.imageId }}
+            - name: OCI_IMAGE_ID
+              value: {{ .Values.oci.imageId }}
+            {{- end }}
+            - name: OCI_USE_INSTANCE_PRINCIPAL
+              value: {{ .Values.oci.useInstancePrincipal | quote }}
+            - name: ENABLE_OCI_DYNAMIC_SHAPES
+              value: {{ .Values.oci.enableDynamicShapes | quote }}
+          ports:
+            - name: http-metrics
+              containerPort: {{ .Values.metrics.port }}
+              protocol: TCP
+            - name: webhook
+              containerPort: {{ .Values.webhook.port }}
+              protocol: TCP
+            - name: webhook-metrics
+              containerPort: {{ .Values.webhook.metricsPort }}
+              protocol: TCP
+          {{- if .Values.livenessProbe }}
+          livenessProbe:
+            {{- toYaml .Values.livenessProbe | nindent 12 }}
+          {{- end }}
+          {{- if .Values.readinessProbe }}
+          readinessProbe:
+            {{- toYaml .Values.readinessProbe | nindent 12 }}
+          {{- end }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          volumeMounts:
+            - name: config
+              mountPath: /config
+              readOnly: true
+            {{- with .Values.controller.volumeMounts }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+      volumes:
+        - name: config
+          configMap:
+            name: {{ include "karpenter-oci.fullname" . }}-settings
+        {{- with .Values.controller.volumes }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      terminationGracePeriodSeconds: {{ .Values.terminationGracePeriodSeconds }}

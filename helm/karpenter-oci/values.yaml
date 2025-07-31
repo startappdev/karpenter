@@ -1,0 +1,212 @@
+# Default values for karpenter-oci
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+# -- Number of replicas
+replicaCount: 1
+
+image:
+  # -- Repository for the Karpenter controller image
+  repository: your-registry.io/karpenter/karpenter-oci
+  # -- Image pull policy
+  pullPolicy: IfNotPresent
+  # -- Image tag override
+  tag: ""
+
+# -- Image pull secrets for private registries
+imagePullSecrets: []
+
+# -- Override the name of the chart
+nameOverride: ""
+# -- Override the full name of the chart
+fullnameOverride: ""
+
+serviceAccount:
+  # -- Specifies whether a service account should be created
+  create: true
+  # -- Annotations to add to the service account
+  annotations: {}
+  # -- The name of the service account to use
+  name: "karpenter"
+
+# -- Pod annotations
+podAnnotations: {}
+
+# -- Pod security context
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 65532
+  runAsGroup: 65532
+  fsGroup: 65532
+  seccompProfile:
+    type: RuntimeDefault
+
+# -- Container security context
+securityContext:
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop:
+      - ALL
+  readOnlyRootFilesystem: true
+
+# -- Resources limits and requests
+resources:
+  limits:
+    memory: 1Gi
+  requests:
+    cpu: 200m
+    memory: 500Mi
+
+# -- Node selector for pod scheduling
+nodeSelector:
+  kubernetes.io/os: linux
+
+# -- Tolerations for pod scheduling
+tolerations:
+  - key: CriticalAddonsOnly
+    operator: Exists
+
+# -- Affinity rules for pod scheduling
+affinity:
+  nodeAffinity:
+    requiredDuringSchedulingIgnoredDuringExecution:
+      nodeSelectorTerms:
+        - matchExpressions:
+          - key: karpenter.sh/nodepool
+            operator: DoesNotExist
+
+# -- Liveness probe configuration
+livenessProbe:
+  httpGet:
+    path: /healthz
+    port: http-metrics
+  initialDelaySeconds: 30
+  periodSeconds: 10
+  timeoutSeconds: 5
+  successThreshold: 1
+  failureThreshold: 3
+
+# -- Readiness probe configuration
+readinessProbe:
+  httpGet:
+    path: /readyz
+    port: http-metrics
+  initialDelaySeconds: 10
+  periodSeconds: 10
+  timeoutSeconds: 5
+  successThreshold: 1
+  failureThreshold: 3
+
+# Karpenter settings
+settings:
+  # -- Cluster name
+  clusterName: ""
+  # -- Log level (info, debug)
+  logLevel: info
+  # -- Batch max duration for scheduling
+  batchMaxDuration: 10s
+  # -- Batch idle duration for scheduling
+  batchIdleDuration: 1s
+  # -- Feature gates
+  featureGates:
+    # -- Enable dynamic provisioning
+    dynamicProvisioning: true
+    # -- Enable drift detection
+    drift: true
+    # -- Enable spot instance interruption handling
+    spotInterruption: true
+
+# OCI-specific settings
+oci:
+  # -- OCI region (e.g., us-ashburn-1, us-phoenix-1)
+  region: ""
+  # -- OCI compartment OCID
+  compartmentId: ""
+  # -- OKE cluster OCID
+  clusterId: ""
+  # -- List of subnet OCIDs for instances
+  subnetIds: []
+  # -- Default image OCID for instances
+  imageId: ""
+  # -- Enable instance principal authentication
+  useInstancePrincipal: true
+  # -- Enable dynamic shapes support
+  enableDynamicShapes: true
+
+# Controller configuration
+controller:
+  # -- Additional environment variables
+  env:
+    - name: CLOUD_PROVIDER
+      value: "oci"
+    - name: ENABLE_PROFILING
+      value: "false"
+    - name: FEATURE_GATES
+      value: "DynamicProvisioning=true"
+    - name: KARPENTER_NAMESPACE
+      valueFrom:
+        fieldRef:
+          fieldPath: metadata.namespace
+  # -- Additional volume mounts
+  volumeMounts:
+    - name: oci-config
+      mountPath: /etc/oci
+      readOnly: true
+  # -- Additional volumes
+  volumes:
+    - name: oci-config
+      secret:
+        secretName: oci-config
+        optional: true
+
+# Webhook configuration
+webhook:
+  # -- Enable webhook
+  enabled: true
+  # -- Webhook port
+  port: 8443
+  # -- Webhook metrics port
+  metricsPort: 8001
+
+# Metrics configuration
+metrics:
+  # -- Enable metrics
+  enabled: true
+  # -- Metrics port
+  port: 8080
+  # -- Create ServiceMonitor for Prometheus
+  serviceMonitor:
+    enabled: false
+    additionalLabels: {}
+    endpointConfig: {}
+
+# Service configuration
+service:
+  # -- Service type
+  type: ClusterIP
+  # -- Service annotations
+  annotations: {}
+
+# -- Pod disruption budget
+podDisruptionBudget:
+  enabled: true
+  maxUnavailable: 1
+
+# -- Priority class name
+priorityClassName: "system-cluster-critical"
+
+# -- DNS policy
+dnsPolicy: ClusterFirst
+
+# -- Termination grace period in seconds
+terminationGracePeriodSeconds: 30
+
+# -- Extra labels to add to all resources
+extraLabels: {}
+
+# RBAC configuration
+rbac:
+  # -- Create RBAC resources
+  create: true
+  # -- Additional rules for the cluster role
+  additionalRules: []

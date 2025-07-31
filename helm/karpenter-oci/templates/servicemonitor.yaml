@@ -1,0 +1,29 @@
+{{- if and .Values.metrics.enabled .Values.metrics.serviceMonitor.enabled }}
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ include "karpenter-oci.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "karpenter-oci.labels" . | nindent 4 }}
+    {{- with .Values.metrics.serviceMonitor.additionalLabels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  selector:
+    matchLabels:
+      {{- include "karpenter-oci.selectorLabels" . | nindent 6 }}
+  endpoints:
+    - port: http-metrics
+      interval: 30s
+      path: /metrics
+      {{- with .Values.metrics.serviceMonitor.endpointConfig }}
+      {{- toYaml . | nindent 6 }}
+      {{- end }}
+    - port: webhook-metrics
+      interval: 30s
+      path: /metrics
+      {{- with .Values.metrics.serviceMonitor.endpointConfig }}
+      {{- toYaml . | nindent 6 }}
+      {{- end }}
+{{- end }}
