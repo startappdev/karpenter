@@ -1,52 +1,32 @@
-# Build stage
-FROM golang:1.22-alpine AS builder
+# Build stage - use official Karpenter approach
+FROM public.ecr.aws/docker/library/golang:1.22-alpine AS builder
 
-# Install required build tools
-RUN apk add --no-cache git make ca-certificates
+# Install dependencies
+RUN apk add --no-cache git
 
 # Set working directory
 WORKDIR /workspace
 
-# Copy go mod files and download dependencies
-COPY go.mod go.sum ./
-# Set Go proxy for better reliability
-ENV GOPROXY=https://proxy.golang.org,direct
-ENV GOSUMDB=sum.golang.org
-# Verify files are copied
-RUN ls -la go.* || echo "Go files not found"
-# Download dependencies with verbose output for debugging
-RUN go mod download || (echo "=== go.mod content ===" && cat go.mod && echo "=== Error details ===" && go mod download -x && exit 1)
-
-# Copy source code
+# Copy all source code first
 COPY . .
 
-# Build the controller with OCI provider support
-# Build with specific flags for production
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
-    -ldflags="-w -s -X main.version=${VERSION:-dev}" \
-    -a -installsuffix cgo \
-    -o karpenter ./kwok/main.go
+# Download dependencies
+RUN go mod download
 
-# Runtime stage - using distroless for minimal attack surface
+# Build the controller
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
+    go build -ldflags="-s -w" -o karpenter ./cmd/controller/main.go
+
+# Runtime stage
 FROM gcr.io/distroless/static:nonroot
 
-# Labels for container metadata
-LABEL org.opencontainers.image.title="Karpenter OCI" \
-      org.opencontainers.image.description="Karpenter with OCI provider support for Oracle Kubernetes Engine" \
-      org.opencontainers.image.vendor="StartApp" \
-      org.opencontainers.image.source="https://github.com/startappdev/karpenter"
+# Labels
+LABEL org.opencontainers.image.source=https://github.com/startappdev/karpenter
 
-# Copy CA certificates for HTTPS connections
-COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
-
-# Copy the binary from builder
+# Copy binary
 COPY --from=builder /workspace/karpenter /karpenter
 
-# Use non-root user
+# Run as non-root
 USER 65532:65532
 
-# Expose metrics and webhook ports
-EXPOSE 8080 8443 8001
-
-# Set the entrypoint
 ENTRYPOINT ["/karpenter"]
