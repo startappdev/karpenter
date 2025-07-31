@@ -163,7 +163,7 @@ spec:
         node_pool: generic
         {{- range $key, $value := .Values.nodeSelector }}
         {{- if and (ne $key "kubernetes.io/os") (ne $key "node_pool") }}
-        {{ $key }}: {{ $value }}
+        {{ $key }}: {{ $value | quote }}
         {{- end }}
         {{- end }}
       {{- with .Values.affinity }}
