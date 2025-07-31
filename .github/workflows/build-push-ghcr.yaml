@@ -187,6 +187,11 @@ jobs:
       IMAGE_NAME: ${{ github.repository }}
     
     steps:
+      - name: Wait for image availability
+        run: |
+          echo "Waiting 30 seconds for image to be available in registry..."
+          sleep 30
+      
       - name: Run Trivy vulnerability scanner
         uses: aquasecurity/trivy-action@master
         with:
@@ -194,14 +199,37 @@ jobs:
           format: 'sarif'
           output: 'trivy-results.sarif'
           severity: 'CRITICAL,HIGH'
+          exit-code: '0'  # Don't fail on vulnerabilities, just report them
 
       - name: Upload Trivy scan results to GitHub Security
         uses: github/codeql-action/upload-sarif@v3
+        if: always()
         with:
           sarif_file: 'trivy-results.sarif'
 
       - name: Create Vulnerability Report
+        if: always()
         run: |
           echo "## Vulnerability Scan Results" >> $GITHUB_STEP_SUMMARY
-          trivy image --format table --severity CRITICAL,HIGH,MEDIUM \
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.ref_name }} >> $GITHUB_STEP_SUMMARY || true
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          # Install trivy if not available
+          if ! command -v trivy &> /dev/null; then
+            curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b /usr/local/bin
+          fi
+          
+          # Try multiple possible tags
+          IMAGE_FOUND=false
+          for TAG in "${{ github.ref_name }}" "oci-latest" "start-io-${{ github.sha:0:7 }}"; do
+            echo "Trying tag: $TAG" >> $GITHUB_STEP_SUMMARY
+            if trivy image --format table --severity CRITICAL,HIGH,MEDIUM \
+              "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${TAG}" >> $GITHUB_STEP_SUMMARY 2>&1; then
+              IMAGE_FOUND=true
+              break
+            fi
+          done
+          
+          if [ "$IMAGE_FOUND" = false ]; then
+            echo "⚠️ Could not scan image - it may not be available yet or tags may be different" >> $GITHUB_STEP_SUMMARY
+            echo "Available tags should include: start-io, oci-latest, start-io-<sha>" >> $GITHUB_STEP_SUMMARY
+          fi
