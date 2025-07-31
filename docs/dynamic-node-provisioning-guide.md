@@ -41,16 +41,16 @@ Dynamic Node Provisioning enables Karpenter to automatically provision OCI flexi
 
 ### Required OCI Policies
 
-```hcl
-# Instance Principal Policy (Recommended)
-Allow dynamic-group karpenter-nodes to manage instances in compartment <compartment-name>
-Allow dynamic-group karpenter-nodes to use virtual-network-family in compartment <compartment-name>
-Allow dynamic-group karpenter-nodes to read compute-management-family in compartment <compartment-name>
+For detailed OCI IAM policy setup, see the [OCI IAM Policy Setup Guide](./oci-iam-policy-setup.md).
 
-# Additional for flexible shapes
-Allow dynamic-group karpenter-nodes to manage compute-capacity-reports in compartment <compartment-name>
-Allow dynamic-group karpenter-nodes to read compute-global-price-list in tenancy
+The minimum required policies are:
+```hcl
+Allow dynamic-group karpenter-nodes-dg to manage instances in compartment <compartment-name>
+Allow dynamic-group karpenter-nodes-dg to use virtual-network-family in compartment <compartment-name>
+Allow dynamic-group karpenter-nodes-dg to manage volume-family in compartment <compartment-name>
 ```
+
+**Note**: Some resource types mentioned in older documentation (like `compute-capacity-reports`, `compute-global-price-list`) are not valid OCI resource types.
 
 ## Installation
 

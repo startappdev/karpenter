@@ -10,6 +10,16 @@ Before creating the policy, ensure you have:
 2. **Correct Compartment ID**: Verify you're using the right compartment
 3. **Proper Permissions**: You need manage permissions on policies in the compartment
 
+## ⚠️ Important Note on OCI Resource Types
+
+Through testing, we've found that many resource types mentioned in various documentation are **not valid** in OCI IAM policies:
+- ❌ `compute-capacity-reports` - Invalid resource type
+- ❌ `compute-global-price-list` - Invalid resource type
+- ❌ `oke-clusters` - Invalid resource type
+- ❌ `shapes` with "inspect" verb - Invalid combination
+
+These permissions are not required for Karpenter to function properly.
+
 ## Step 1: Verify or Create Dynamic Group
 
 First, check if the dynamic group exists:
@@ -39,12 +49,12 @@ oci iam dynamic-group create \
 
 ## Step 2: Create IAM Policy
 
-### Option A: Basic Policy (Start with this)
+### ✅ Working Policy (Use This)
 
-Create a minimal policy file:
+Based on testing, here's the policy that actually works with OCI:
 
 ```bash
-cat > karpenter-policy-basic.json <<'EOF'
+cat > karpenter-policy.json <<'EOF'
 [
   "Allow dynamic-group karpenter-nodes-dg to manage instances in compartment id ocid1.compartment.oc1..aaaaaaaalr5oi5mfqpjedsdsyn3vxn2fh2bltqezqrmk4bi7gaq6i245qnkq",
   "Allow dynamic-group karpenter-nodes-dg to use virtual-network-family in compartment id ocid1.compartment.oc1..aaaaaaaalr5oi5mfqpjedsdsyn3vxn2fh2bltqezqrmk4bi7gaq6i245qnkq",
@@ -60,39 +70,24 @@ oci iam policy create \
   --compartment-id ocid1.compartment.oc1..aaaaaaaalr5oi5mfqpjedsdsyn3vxn2fh2bltqezqrmk4bi7gaq6i245qnkq \
   --name "karpenter-policy" \
   --description "Policy for Karpenter to manage instances" \
-  --statements file://karpenter-policy-basic.json
+  --statements file://karpenter-policy.json
 ```
 
-### Option B: Extended Policy for OKE
+This policy provides Karpenter with:
+- **manage instances**: Create, delete, and manage compute instances
+- **use virtual-network-family**: Attach instances to subnets and configure networking
+- **manage volume-family**: Create and attach block storage volumes
 
-If you need OKE-specific permissions:
+### Additional Permissions (Optional)
 
-```bash
-cat > karpenter-policy-oke.json <<'EOF'
-[
-  "Allow dynamic-group karpenter-nodes-dg to manage instances in compartment id ocid1.compartment.oc1..aaaaaaaalr5oi5mfqpjedsdsyn3vxn2fh2bltqezqrmk4bi7gaq6i245qnkq",
-  "Allow dynamic-group karpenter-nodes-dg to use virtual-network-family in compartment id ocid1.compartment.oc1..aaaaaaaalr5oi5mfqpjedsdsyn3vxn2fh2bltqezqrmk4bi7gaq6i245qnkq",
-  "Allow dynamic-group karpenter-nodes-dg to manage volume-family in compartment id ocid1.compartment.oc1..aaaaaaaalr5oi5mfqpjedsdsyn3vxn2fh2bltqezqrmk4bi7gaq6i245qnkq",
-  "Allow dynamic-group karpenter-nodes-dg to use oke-clusters in compartment id ocid1.compartment.oc1..aaaaaaaalr5oi5mfqpjedsdsyn3vxn2fh2bltqezqrmk4bi7gaq6i245qnkq"
-]
-EOF
-```
-
-### Option C: Policy for Flexible Shapes
-
-For dynamic provisioning with flexible shapes:
+You may also want to add these permissions if they're supported in your tenancy:
 
 ```bash
-cat > karpenter-policy-flexible.json <<'EOF'
-[
-  "Allow dynamic-group karpenter-nodes-dg to manage instances in compartment id ocid1.compartment.oc1..aaaaaaaalr5oi5mfqpjedsdsyn3vxn2fh2bltqezqrmk4bi7gaq6i245qnkq",
-  "Allow dynamic-group karpenter-nodes-dg to use virtual-network-family in compartment id ocid1.compartment.oc1..aaaaaaaalr5oi5mfqpjedsdsyn3vxn2fh2bltqezqrmk4bi7gaq6i245qnkq",
-  "Allow dynamic-group karpenter-nodes-dg to manage volume-family in compartment id ocid1.compartment.oc1..aaaaaaaalr5oi5mfqpjedsdsyn3vxn2fh2bltqezqrmk4bi7gaq6i245qnkq",
-  "Allow dynamic-group karpenter-nodes-dg to use oke-clusters in compartment id ocid1.compartment.oc1..aaaaaaaalr5oi5mfqpjedsdsyn3vxn2fh2bltqezqrmk4bi7gaq6i245qnkq",
-  "Allow dynamic-group karpenter-nodes-dg to read instance-configurations in compartment id ocid1.compartment.oc1..aaaaaaaalr5oi5mfqpjedsdsyn3vxn2fh2bltqezqrmk4bi7gaq6i245qnkq",
-  "Allow dynamic-group karpenter-nodes-dg to inspect shapes in tenancy"
-]
-EOF
+# For reading instance configurations
+"Allow dynamic-group karpenter-nodes-dg to read instance-configurations in compartment id <compartment-id>"
+
+# For reading compute management resources
+"Allow dynamic-group karpenter-nodes-dg to read compute-management-family in compartment id <compartment-id>"
 ```
 
 ## Troubleshooting Common Errors
@@ -112,13 +107,6 @@ oci iam dynamic-group list --compartment-id <tenancy-ocid> --all | grep karpente
 # If not found, create it first (see Step 1)
 ```
 
-### Error: "Invalid resource type"
-
-Some resource types mentioned in documentation may not be valid in your OCI region/tenancy:
-- `compute-capacity-reports` - Not a valid resource type
-- `compute-global-price-list` - Not a valid resource type
-
-**Solution:** Use the basic or OKE policy options above which only include valid resource types.
 
 ### Error: "Permission denied"
 
@@ -173,15 +161,21 @@ Once the policy is created successfully:
 
 ## Valid OCI Resource Types Reference
 
-Here are the valid resource types for OCI IAM policies:
+Here are the **confirmed valid** resource types for OCI IAM policies based on our testing:
 
-- `instances` - Virtual machines
+✅ **Working Resource Types:**
+- `instances` - Virtual machines (use with manage, use, read verbs)
 - `instance-family` - All instance-related resources  
-- `instance-configurations` - Instance configuration resources
 - `virtual-network-family` - VCN, subnets, security lists
 - `volume-family` - Block storage volumes
-- `oke-clusters` - OKE cluster resources
-- `shapes` - Shape information (inspect only)
+- `instance-configurations` - Instance configuration resources (may work with read verb)
+- `compute-management-family` - Compute management resources (may work with read verb)
+
+❌ **Invalid Resource Types (Do Not Use):**
+- `compute-capacity-reports` - Not a valid resource type
+- `compute-global-price-list` - Not a valid resource type
+- `oke-clusters` - Not a valid resource type
+- `shapes` - Cannot be used with "inspect" verb at tenancy level
 
 ## Important Notes
 
