@@ -29,7 +29,7 @@ import (
 	"sigs.k8s.io/karpenter/pkg/controllers/state"
 	
 	// Import OCI provider package
-	_ "github.com/startappdev/karpenter/pkg/providers/oci"
+	"sigs.k8s.io/karpenter/pkg/providers/oci"
 )
 
 func main() {
@@ -49,6 +49,35 @@ func main() {
 	ociConfig := parseOCIConfig()
 	logger.Info("Starting Karpenter with OCI provider", "config", ociConfig)
 	
+	// Create OCI provider
+	subnetIDs := []string{}
+	if ociConfig["subnetIds"] != "" {
+		subnetIDs = strings.Split(ociConfig["subnetIds"], ",")
+		for i := range subnetIDs {
+			subnetIDs[i] = strings.TrimSpace(subnetIDs[i])
+		}
+	}
+	
+	authType := "instance_principal"
+	if ociConfig["useInstancePrincipal"] != "true" {
+		authType = "user_principal"
+	}
+	
+	ociProvider, err := oci.NewProvider(ctx, &oci.Config{
+		AuthType:              authType,
+		Region:                ociConfig["region"],
+		CompartmentID:         ociConfig["compartmentId"],
+		SubnetIDs:             subnetIDs,
+		ImageID:               ociConfig["imageId"],
+		DefaultShapes:         []string{"VM.Standard.E4.Flex", "VM.Standard.E5.Flex"},
+		EnableDetailedMetrics: ociConfig["enableDynamicShapes"] == "true",
+		MaxConcurrentLaunches: 10,
+	})
+	if err != nil {
+		logger.Error(err, "failed to create OCI provider")
+		os.Exit(1)
+	}
+	
 	// Register core Karpenter controllers
 	op = op.WithControllers(
 		corecontrollers.NewControllers(
@@ -56,7 +85,7 @@ func main() {
 			op.GetClient(),
 			op.EventRecorder,
 			cluster,
-			nil, // Cloud provider will be injected by the OCI provider
+			ociProvider,
 		)...,
 	).WithWebhooks()
 	
