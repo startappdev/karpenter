@@ -1,0 +1,203 @@
+name: Build and Push to GHCR
+
+on:
+  push:
+    branches:
+      - main
+      - start-io
+      - 'release-*'
+    tags:
+      - 'v*'
+  pull_request:
+    branches:
+      - main
+      - start-io
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Custom tag for the image'
+        required: false
+        type: string
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+      id-token: write # for cosign signing
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # for git describe
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: linux/amd64,linux/arm64
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+        with:
+          driver-opts: |
+            image=moby/buildkit:latest
+            network=host
+
+      - name: Log in to GitHub Container Registry
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            # Branch events
+            type=ref,event=branch
+            # Tag events
+            type=ref,event=tag
+            # PR events
+            type=ref,event=pr
+            # Semantic versions
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}},enable=${{ !startsWith(github.ref, 'refs/tags/v0.') }}
+            # Short SHA
+            type=sha,prefix={{branch}}-,enable=${{ github.ref_type == 'branch' }}
+            # Custom tag from workflow_dispatch
+            type=raw,value=${{ inputs.tag }},enable=${{ inputs.tag != '' }}
+            # Latest tag for main branch
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
+            # OCI-specific tags
+            type=raw,value=oci-latest,enable=${{ github.ref == 'refs/heads/start-io' }}
+          flavor: |
+            latest=false
+          labels: |
+            org.opencontainers.image.title=Karpenter OCI
+            org.opencontainers.image.description=Karpenter with OCI provider support for Oracle Kubernetes Engine
+            org.opencontainers.image.vendor=StartApp
+            maintainer=StartApp Team <support@startapp.com>
+
+      - name: Generate build args
+        id: buildargs
+        run: |
+          VERSION="${{ fromJSON(steps.meta.outputs.json).labels['org.opencontainers.image.version'] || 'dev' }}"
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+          echo "build_date=$(date -u +'%Y-%m-%dT%H:%M:%SZ')" >> $GITHUB_OUTPUT
+          echo "git_commit=${GITHUB_SHA::8}" >> $GITHUB_OUTPUT
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          annotations: ${{ steps.meta.outputs.annotations }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          build-args: |
+            VERSION=${{ steps.buildargs.outputs.version }}
+            BUILD_DATE=${{ steps.buildargs.outputs.build_date }}
+            GIT_COMMIT=${{ steps.buildargs.outputs.git_commit }}
+          provenance: true
+          sbom: true
+
+      - name: Install Cosign
+        if: github.event_name != 'pull_request'
+        uses: sigstore/cosign-installer@v3
+
+      - name: Sign container image
+        if: github.event_name != 'pull_request'
+        env:
+          COSIGN_EXPERIMENTAL: 1
+        run: |
+          # Sign the image with keyless signing
+          echo "${{ steps.meta.outputs.tags }}" | while IFS= read -r tag; do
+            echo "Signing $tag"
+            cosign sign --yes "$tag"
+          done
+
+      - name: Generate SBOM
+        if: github.event_name != 'pull_request'
+        uses: anchore/syft-action@v1
+        with:
+          image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ steps.build.outputs.digest }}
+          output-file: sbom.spdx.json
+          format: spdx-json
+
+      - name: Attach SBOM to image
+        if: github.event_name != 'pull_request'
+        env:
+          COSIGN_EXPERIMENTAL: 1
+        run: |
+          echo "Attaching SBOM to image"
+          cosign attach sbom --sbom sbom.spdx.json \
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ steps.build.outputs.digest }}
+
+      - name: Create Release Summary
+        if: github.event_name != 'pull_request'
+        run: |
+          echo "## Build Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Image Tags" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          echo "${{ steps.meta.outputs.tags }}" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Labels" >> $GITHUB_STEP_SUMMARY
+          echo '```json' >> $GITHUB_STEP_SUMMARY
+          echo '${{ steps.meta.outputs.json }}' | jq -r '.labels' >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Build Arguments" >> $GITHUB_STEP_SUMMARY
+          echo "- Version: \`${{ steps.buildargs.outputs.version }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- Build Date: \`${{ steps.buildargs.outputs.build_date }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- Git Commit: \`${{ steps.buildargs.outputs.git_commit }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Security" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Image signed with Cosign" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ SBOM attached" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Provenance included" >> $GITHUB_STEP_SUMMARY
+
+  vulnerability-scan:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    if: github.event_name != 'pull_request'
+    permissions:
+      contents: read
+      packages: read
+      security-events: write
+    
+    steps:
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.ref_name }}
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+          severity: 'CRITICAL,HIGH'
+
+      - name: Upload Trivy scan results to GitHub Security
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: 'trivy-results.sarif'
+
+      - name: Create Vulnerability Report
+        run: |
+          echo "## Vulnerability Scan Results" >> $GITHUB_STEP_SUMMARY
+          trivy image --format table --severity CRITICAL,HIGH,MEDIUM \
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.ref_name }} >> $GITHUB_STEP_SUMMARY || true
