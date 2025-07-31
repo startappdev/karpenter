@@ -23,77 +23,48 @@ import (
 	"strings"
 
 	"sigs.k8s.io/controller-runtime/pkg/log"
-
+	
 	"sigs.k8s.io/karpenter/pkg/operator"
 	corecontrollers "sigs.k8s.io/karpenter/pkg/controllers"
 	"sigs.k8s.io/karpenter/pkg/controllers/state"
-	
-	// Import OCI provider package
 	"sigs.k8s.io/karpenter/pkg/providers/oci"
 )
 
 func main() {
-	ctx := context.Background()
-	logger := log.FromContext(ctx)
-	
 	// Print version information
 	fmt.Printf("Karpenter OCI Version: %s\n", version)
 	
-	// Create operator with default settings
-	op := operator.NewOperator()
+	// Verify required environment variables are set
+	verifyEnvironment()
 	
-	// Initialize cluster state
-	cluster := state.NewCluster(op.Clock, op.GetClient())
-	
-	// Parse OCI configuration from environment
-	ociConfig := parseOCIConfig()
-	logger.Info("Starting Karpenter with OCI provider", "config", ociConfig)
+	// Create operator context
+	ctx, op := operator.NewOperator()
 	
 	// Create OCI provider
-	subnetIDs := []string{}
-	if ociConfig["subnetIds"] != "" {
-		subnetIDs = strings.Split(ociConfig["subnetIds"], ",")
-		for i := range subnetIDs {
-			subnetIDs[i] = strings.TrimSpace(subnetIDs[i])
-		}
-	}
-	
-	authType := "instance_principal"
-	if ociConfig["useInstancePrincipal"] != "true" {
-		authType = "user_principal"
-	}
-	
-	ociProvider, err := oci.NewProvider(ctx, &oci.Config{
-		AuthType:              authType,
-		Region:                ociConfig["region"],
-		CompartmentID:         ociConfig["compartmentId"],
-		SubnetIDs:             subnetIDs,
-		ImageID:               ociConfig["imageId"],
-		DefaultShapes:         []string{"VM.Standard.E4.Flex", "VM.Standard.E5.Flex"},
-		EnableDetailedMetrics: ociConfig["enableDynamicShapes"] == "true",
-		MaxConcurrentLaunches: 10,
-	})
+	ociProvider, err := createOCIProvider(ctx)
 	if err != nil {
-		logger.Error(err, "failed to create OCI provider")
+		log.FromContext(ctx).Error(err, "failed to create OCI provider")
 		os.Exit(1)
 	}
 	
-	// Register core Karpenter controllers
-	op = op.WithControllers(
+	// Create cluster state
+	cluster := state.NewCluster(op.Clock, op.GetClient())
+	
+	// Register controllers with OCI provider
+	op.WithControllers(ctx,
 		corecontrollers.NewControllers(
+			ctx,
+			op.Manager,
 			op.Clock,
 			op.GetClient(),
 			op.EventRecorder,
-			cluster,
 			ociProvider,
+			cluster,
 		)...,
 	).WithWebhooks()
 	
 	// Start the operator
-	if err := op.Start(ctx); err != nil {
-		logger.Error(err, "failed to start operator")
-		os.Exit(1)
-	}
+	op.Start(ctx)
 }
 
 // version is set via ldflags at build time
@@ -105,37 +76,57 @@ func init() {
 	}
 }
 
-// parseOCIConfig reads OCI configuration from environment variables
-func parseOCIConfig() map[string]string {
-	config := make(map[string]string)
-	
-	// Required configuration
-	config["region"] = getEnvOrDie("OCI_REGION")
-	config["compartmentId"] = getEnvOrDie("OCI_COMPARTMENT_ID")
-	config["clusterId"] = getEnvOrDie("OCI_CLUSTER_ID")
-	
-	// Optional configuration
-	if v := os.Getenv("OCI_SUBNET_IDS"); v != "" {
-		config["subnetIds"] = v
-	}
-	if v := os.Getenv("OCI_IMAGE_ID"); v != "" {
-		config["imageId"] = v
-	}
-	if v := os.Getenv("OCI_USE_INSTANCE_PRINCIPAL"); v != "" {
-		config["useInstancePrincipal"] = v
-	}
-	if v := os.Getenv("ENABLE_OCI_DYNAMIC_SHAPES"); v != "" {
-		config["enableDynamicShapes"] = v
+// verifyEnvironment checks that required environment variables are set
+func verifyEnvironment() {
+	required := []string{
+		"OCI_REGION",
+		"OCI_COMPARTMENT_ID",
+		"OCI_CLUSTER_ID",
+		"CLUSTER_NAME",
 	}
 	
-	return config
-}
-
-func getEnvOrDie(key string) string {
-	value := os.Getenv(key)
-	if value == "" {
-		fmt.Fprintf(os.Stderr, "ERROR: Required environment variable %s is not set\n", key)
+	missing := []string{}
+	for _, env := range required {
+		if os.Getenv(env) == "" {
+			missing = append(missing, env)
+		}
+	}
+	
+	if len(missing) > 0 {
+		fmt.Fprintf(os.Stderr, "ERROR: Required environment variables are not set: %s\n", strings.Join(missing, ", "))
 		os.Exit(1)
 	}
-	return strings.TrimSpace(value)
+}
+
+// createOCIProvider creates and configures the OCI cloud provider
+func createOCIProvider(ctx context.Context) (*oci.Provider, error) {
+	// Parse subnet IDs
+	subnetIDs := []string{}
+	if subnetIDsStr := os.Getenv("OCI_SUBNET_IDS"); subnetIDsStr != "" {
+		subnetIDs = strings.Split(subnetIDsStr, ",")
+		for i := range subnetIDs {
+			subnetIDs[i] = strings.TrimSpace(subnetIDs[i])
+		}
+	}
+	
+	// Determine auth type
+	authType := "instance_principal"
+	if os.Getenv("OCI_USE_INSTANCE_PRINCIPAL") != "true" {
+		authType = "user_principal"
+	}
+	
+	// Create OCI configuration
+	config := &oci.Config{
+		AuthType:              authType,
+		Region:                os.Getenv("OCI_REGION"),
+		CompartmentID:         os.Getenv("OCI_COMPARTMENT_ID"),
+		SubnetIDs:             subnetIDs,
+		ImageID:               os.Getenv("OCI_IMAGE_ID"),
+		DefaultShapes:         []string{"VM.Standard.E4.Flex", "VM.Standard.E5.Flex"},
+		EnableDetailedMetrics: os.Getenv("ENABLE_OCI_DYNAMIC_SHAPES") == "true",
+		MaxConcurrentLaunches: 10,
+	}
+	
+	log.FromContext(ctx).Info("Creating OCI provider", "config", config)
+	return oci.NewProvider(ctx, config)
 }
