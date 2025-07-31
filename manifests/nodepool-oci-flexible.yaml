@@ -1,0 +1,58 @@
+apiVersion: karpenter.sh/v1
+kind: NodePool
+metadata:
+  name: oci-flexible-pool
+  namespace: karpenter
+spec:
+  # Template for nodes created by this NodePool
+  template:
+    metadata:
+      labels:
+        karpenter.sh/nodepool: oci-flexible-pool
+        node-type: karpenter-managed
+    spec:
+      # Requirements for node provisioning
+      requirements:
+        - key: karpenter.sh/capacity-type
+          operator: In
+          values: ["on-demand"]  # OCI doesn't have spot in the same way as AWS
+        - key: kubernetes.io/arch
+          operator: In
+          values: ["amd64"]
+        - key: kubernetes.io/os
+          operator: In
+          values: ["linux"]
+        - key: node.kubernetes.io/instance-type
+          operator: In
+          values:
+            # OCI Flexible shapes - these need to match what's available in your OCI tenancy
+            - VM.Standard.E4.Flex
+            - VM.Standard.E5.Flex
+      # Node taints
+      taints:
+        - key: karpenter-test
+          value: "true"
+          effect: NoSchedule
+  # Disruption settings
+  disruption:
+    consolidationPolicy: WhenEmptyOrUnderutilized
+    consolidateAfter: 30s  # Quick consolidation for testing
+  # Limits for the NodePool
+  limits:
+    cpu: 100
+    memory: 100Gi
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: oci-nodepool-config
+  namespace: karpenter
+data:
+  # OCI-specific configuration that Karpenter OCI provider will use
+  shape-config: |
+    VM.Standard.E4.Flex:
+      ocpus: 4
+      memoryInGBs: 64
+    VM.Standard.E5.Flex:
+      ocpus: 8
+      memoryInGBs: 128
