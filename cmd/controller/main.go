@@ -37,11 +37,11 @@ func main() {
 	config := &oci.Config{
 		Region:        lo.Must(os.LookupEnv("OCI_REGION")),
 		CompartmentID: lo.Must(os.LookupEnv("OCI_COMPARTMENT_ID")),
-		ClusterID:     lo.Must(os.LookupEnv("OCI_CLUSTER_ID")),
 		SubnetIDs:     []string{}, // Will be populated from environment
 		ImageID:       os.Getenv("OCI_IMAGE_ID"),
-		UseInstancePrincipal: os.Getenv("OCI_USE_INSTANCE_PRINCIPAL") == "true",
-		EnableDynamicShapes:  os.Getenv("ENABLE_OCI_DYNAMIC_SHAPES") == "true",
+		AuthType:      "instance_principal", // Use instance principal by default
+		DefaultShapes: []string{"VM.Standard.E4.Flex", "VM.Standard.E5.Flex"},
+		EnableDetailedMetrics: true,
 	}
 	
 	// Parse subnet IDs from environment
