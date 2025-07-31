@@ -17,54 +17,96 @@ limitations under the License.
 package main
 
 import (
+	"context"
 	"fmt"
-	"log"
-	"net/http"
 	"os"
-	"time"
+	"strings"
+
+	"sigs.k8s.io/controller-runtime/pkg/log"
+
+	"sigs.k8s.io/karpenter/pkg/operator"
+	corecontrollers "sigs.k8s.io/karpenter/pkg/controllers"
+	"sigs.k8s.io/karpenter/pkg/controllers/state"
+	
+	// Import OCI provider package
+	_ "github.com/startappdev/karpenter/pkg/providers/oci"
 )
 
 func main() {
-	fmt.Println("Karpenter OCI starting...")
+	ctx := context.Background()
+	logger := log.FromContext(ctx)
 	
-	// For now, create a minimal working binary that serves health endpoints
-	// This allows the Docker build to succeed while we fix dependency issues
+	// Print version information
+	fmt.Printf("Karpenter OCI Version: %s\n", version)
 	
-	// Health check endpoint
-	http.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		fmt.Fprintf(w, "ok")
-	})
+	// Create operator with default settings
+	op := operator.NewOperator()
 	
-	// Ready check endpoint
-	http.HandleFunc("/readyz", func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		fmt.Fprintf(w, "ok")
-	})
+	// Initialize cluster state
+	cluster := state.NewCluster(op.Clock, op.GetClient())
 	
-	// Metrics endpoint placeholder
-	http.HandleFunc("/metrics", func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		fmt.Fprintf(w, "# HELP karpenter_build_info Karpenter build information\n")
-		fmt.Fprintf(w, "# TYPE karpenter_build_info gauge\n")
-		fmt.Fprintf(w, "karpenter_build_info{version=\"dev\"} 1\n")
-	})
+	// Parse OCI configuration from environment
+	ociConfig := parseOCIConfig()
+	logger.Info("Starting Karpenter with OCI provider", "config", ociConfig)
 	
-	// Start server
-	port := os.Getenv("PORT")
-	if port == "" {
-		port = "8080"
+	// Register core Karpenter controllers
+	op = op.WithControllers(
+		corecontrollers.NewControllers(
+			op.Clock,
+			op.GetClient(),
+			op.EventRecorder,
+			cluster,
+			nil, // Cloud provider will be injected by the OCI provider
+		)...,
+	).WithWebhooks()
+	
+	// Start the operator
+	if err := op.Start(ctx); err != nil {
+		logger.Error(err, "failed to start operator")
+		os.Exit(1)
+	}
+}
+
+// version is set via ldflags at build time
+var version = "dev"
+
+func init() {
+	if v := os.Getenv("VERSION"); v != "" {
+		version = v
+	}
+}
+
+// parseOCIConfig reads OCI configuration from environment variables
+func parseOCIConfig() map[string]string {
+	config := make(map[string]string)
+	
+	// Required configuration
+	config["region"] = getEnvOrDie("OCI_REGION")
+	config["compartmentId"] = getEnvOrDie("OCI_COMPARTMENT_ID")
+	config["clusterId"] = getEnvOrDie("OCI_CLUSTER_ID")
+	
+	// Optional configuration
+	if v := os.Getenv("OCI_SUBNET_IDS"); v != "" {
+		config["subnetIds"] = v
+	}
+	if v := os.Getenv("OCI_IMAGE_ID"); v != "" {
+		config["imageId"] = v
+	}
+	if v := os.Getenv("OCI_USE_INSTANCE_PRINCIPAL"); v != "" {
+		config["useInstancePrincipal"] = v
+	}
+	if v := os.Getenv("ENABLE_OCI_DYNAMIC_SHAPES"); v != "" {
+		config["enableDynamicShapes"] = v
 	}
 	
-	server := &http.Server{
-		Addr:         ":" + port,
-		Handler:      http.DefaultServeMux,
-		ReadTimeout:  30 * time.Second,
-		WriteTimeout: 30 * time.Second,
+	return config
+}
+
+func getEnvOrDie(key string) string {
+	value := os.Getenv(key)
+	if value == "" {
+		fmt.Fprintf(os.Stderr, "ERROR: Required environment variable %s is not set\n", key)
+		os.Exit(1)
 	}
-	
-	log.Printf("Starting Karpenter OCI on port %s", port)
-	if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-		log.Fatalf("Server failed to start: %v", err)
-	}
+	return strings.TrimSpace(value)
 }
