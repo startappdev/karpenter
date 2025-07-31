@@ -297,7 +297,7 @@ func (p *InstanceTypeProvider) generateExactFitInstanceTypes(ctx context.Context
 		requirements := scheduling.NewRequirements(
 			scheduling.NewRequirement(corev1.LabelInstanceTypeStable, corev1.NodeSelectorOpIn, instanceName),
 			scheduling.NewRequirement(corev1.LabelArchStable, corev1.NodeSelectorOpIn, "amd64"),
-			scheduling.NewRequirement(v1.LabelInstanceCategory, corev1.NodeSelectorOpIn, "flex"),
+			scheduling.NewRequirement("karpenter.sh/instance-category", corev1.NodeSelectorOpIn, "flex"),
 			scheduling.NewRequirement("oci.oraclecloud.com/shape", corev1.NodeSelectorOpIn, shape),
 		)
 		
@@ -387,7 +387,7 @@ func (p *InstanceTypeProvider) generateCostOptimizedInstanceTypes(ctx context.Co
 				requirements := scheduling.NewRequirements(
 					scheduling.NewRequirement(corev1.LabelInstanceTypeStable, corev1.NodeSelectorOpIn, instanceName),
 					scheduling.NewRequirement(corev1.LabelArchStable, corev1.NodeSelectorOpIn, "amd64"),
-					scheduling.NewRequirement(v1.LabelInstanceCategory, corev1.NodeSelectorOpIn, "flex"),
+					scheduling.NewRequirement("karpenter.sh/instance-category", corev1.NodeSelectorOpIn, "flex"),
 					scheduling.NewRequirement("oci.oraclecloud.com/shape", corev1.NodeSelectorOpIn, shape),
 				)
 				
@@ -462,7 +462,7 @@ func (p *InstanceTypeProvider) generateSingleInstanceType(dp *v1.DynamicProvisio
 	requirements := scheduling.NewRequirements(
 		scheduling.NewRequirement(corev1.LabelInstanceTypeStable, corev1.NodeSelectorOpIn, instanceName),
 		scheduling.NewRequirement(corev1.LabelArchStable, corev1.NodeSelectorOpIn, "amd64"),
-		scheduling.NewRequirement(v1.LabelInstanceCategory, corev1.NodeSelectorOpIn, "flex"),
+		scheduling.NewRequirement("karpenter.sh/instance-category", corev1.NodeSelectorOpIn, "flex"),
 		scheduling.NewRequirement("oci.oraclecloud.com/shape", corev1.NodeSelectorOpIn, shape),
 	)
 	

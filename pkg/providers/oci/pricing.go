@@ -112,11 +112,11 @@ func (p *PricingProvider) GetOptimalShapeConfiguration(ctx context.Context, minO
 		shapeLimits := p.getShapeLimits(shape)
 		
 		// Calculate optimal configuration within constraints
-		ocpus := max(minOCPUs, shapeLimits.OCPUOptions.Min)
-		ocpus = min(ocpus, min(maxOCPUs, shapeLimits.OCPUOptions.Max))
+		ocpus := max(minOCPUs, int32(shapeLimits.OCPUOptions.Min))
+		ocpus = min(ocpus, min(maxOCPUs, int32(shapeLimits.OCPUOptions.Max)))
 		
-		memoryGB := max(minMemoryGB, shapeLimits.MemoryOptions.MinInGBs)
-		memoryGB = min(memoryGB, min(maxMemoryGB, shapeLimits.MemoryOptions.MaxInGBs))
+		memoryGB := max(minMemoryGB, int32(shapeLimits.MemoryOptions.MinInGBs))
+		memoryGB = min(memoryGB, min(maxMemoryGB, int32(shapeLimits.MemoryOptions.MaxInGBs)))
 		
 		// Calculate price
 		price, err := p.GetShapePrice(ctx, shape, ocpus, memoryGB, false)

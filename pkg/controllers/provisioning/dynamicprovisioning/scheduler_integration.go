@@ -192,7 +192,7 @@ func (s *SchedulerIntegration) recommendationToInstanceType(
 	requirements := karscheduling.NewRequirements(
 		karscheduling.NewRequirement(corev1.LabelInstanceTypeStable, corev1.NodeSelectorOpIn, instanceName),
 		karscheduling.NewRequirement(corev1.LabelArchStable, corev1.NodeSelectorOpIn, "amd64"),
-		karscheduling.NewRequirement(v1.LabelInstanceCategory, corev1.NodeSelectorOpIn, "flex"),
+		karscheduling.NewRequirement("karpenter.sh/instance-category", corev1.NodeSelectorOpIn, "flex"),
 		karscheduling.NewRequirement("oci.oraclecloud.com/shape", corev1.NodeSelectorOpIn, rec.Shape),
 		karscheduling.NewRequirement("karpenter.sh/dynamic-provisioning", corev1.NodeSelectorOpIn, "true"),
 	)
