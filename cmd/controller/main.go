@@ -48,7 +48,7 @@ func main() {
 	}
 	
 	// Create cluster state
-	cluster := state.NewCluster(op.Clock, op.GetClient())
+	cluster := state.NewCluster(op.Clock, op.GetClient(), ociProvider)
 	
 	// Register controllers with OCI provider
 	op.WithControllers(ctx,
@@ -61,7 +61,7 @@ func main() {
 			ociProvider,
 			cluster,
 		)...,
-	).WithWebhooks()
+	)
 	
 	// Start the operator
 	op.Start(ctx)
