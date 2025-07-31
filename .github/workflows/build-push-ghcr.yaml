@@ -98,6 +98,7 @@ jobs:
           echo "git_commit=${GITHUB_SHA::8}" >> $GITHUB_OUTPUT
 
       - name: Build and push Docker image
+        id: build
         uses: docker/build-push-action@v5
         with:
           context: .
@@ -133,11 +134,11 @@ jobs:
 
       - name: Generate SBOM
         if: github.event_name != 'pull_request'
-        uses: anchore/syft-action@v1
+        uses: anchore/sbom-action@v0
         with:
           image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ steps.build.outputs.digest }}
-          output-file: sbom.spdx.json
           format: spdx-json
+          output-file: sbom.spdx.json
 
       - name: Attach SBOM to image
         if: github.event_name != 'pull_request'
@@ -181,6 +182,9 @@ jobs:
       contents: read
       packages: read
       security-events: write
+    env:
+      REGISTRY: ghcr.io
+      IMAGE_NAME: ${{ github.repository }}
     
     steps:
       - name: Run Trivy vulnerability scanner
