@@ -159,11 +159,13 @@ spec:
         {{- toYaml . | nindent 8 }}
         {{- end }}
       nodeSelector:
-        {{- with .Values.nodeSelector }}
-        {{- toYaml . | nindent 8 }}
-        {{- end }}
-        # Always include node_pool selector for generic nodes
+        kubernetes.io/os: linux
         node_pool: generic
+        {{- range $key, $value := .Values.nodeSelector }}
+        {{- if and (ne $key "kubernetes.io/os") (ne $key "node_pool") }}
+        {{ $key }}: {{ $value }}
+        {{- end }}
+        {{- end }}
       {{- with .Values.affinity }}
       affinity:
         {{- toYaml . | nindent 8 }}
