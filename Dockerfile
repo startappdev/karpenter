@@ -9,7 +9,11 @@ WORKDIR /workspace
 
 # Copy go mod files and download dependencies
 COPY go.mod go.sum ./
-RUN go mod download
+# Set Go proxy for better reliability
+ENV GOPROXY=https://proxy.golang.org,direct
+ENV GOSUMDB=sum.golang.org
+# Download dependencies with verbose output for debugging
+RUN go mod download -x || (cat go.mod && exit 1)
 
 # Copy source code
 COPY . .
