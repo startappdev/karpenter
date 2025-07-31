@@ -4,14 +4,28 @@ FROM public.ecr.aws/docker/library/golang:1.22-alpine AS builder
 # Install dependencies
 RUN apk add --no-cache git
 
+# Set Go environment
+ENV GO111MODULE=on
+ENV GOPROXY=https://proxy.golang.org,direct
+ENV GOSUMDB=sum.golang.org
+
 # Set working directory
 WORKDIR /workspace
 
-# Copy all source code first
-COPY . .
+# Copy go.mod and go.sum first
+COPY go.mod go.sum ./
 
-# Download dependencies
-RUN go mod download
+# Debug: Show Go environment and files
+RUN go version && \
+    echo "=== Files in workspace ===" && \
+    ls -la && \
+    echo "=== go.mod content (first 10 lines) ===" && \
+    head -10 go.mod && \
+    echo "=== Attempting go mod download ===" && \
+    go mod download -x
+
+# Copy source code
+COPY . .
 
 # Build the controller
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
