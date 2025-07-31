@@ -163,16 +163,9 @@ controller:
         fieldRef:
           fieldPath: metadata.namespace
   # -- Additional volume mounts
-  volumeMounts:
-    - name: oci-config
-      mountPath: /etc/oci
-      readOnly: true
+  volumeMounts: []
   # -- Additional volumes
-  volumes:
-    - name: oci-config
-      secret:
-        secretName: oci-config
-        optional: true
+  volumes: []
 
 # Webhook configuration
 webhook:
