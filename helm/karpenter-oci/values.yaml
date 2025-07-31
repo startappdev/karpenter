@@ -7,11 +7,11 @@ replicaCount: 1
 
 image:
   # -- Repository for the Karpenter controller image
-  repository: your-registry.io/karpenter/karpenter-oci
+  repository: ghcr.io/startappdev/karpenter
   # -- Image pull policy
   pullPolicy: IfNotPresent
-  # -- Image tag override
-  tag: ""
+  # -- Image tag override (defaults to chart appVersion if not set)
+  tag: "start-io-633cb25"
 
 # -- Image pull secrets for private registries
 imagePullSecrets:
