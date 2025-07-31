@@ -1,0 +1,16 @@
+apiVersion: helm.toolkit.fluxcd.io/v2beta2
+kind: HelmRelease
+metadata:
+  name: karpenter
+  namespace: karpenter
+spec:
+  values:
+    # Remove or update these OCI settings in your FluxCD repository
+    oci:
+      existingSecret: "oci-config-new"  # Use the new secret name
+      existingSecretConfigKey: ""        # Leave empty to use individual keys
+    
+    # Ensure the chart version is updated
+    chart:
+      spec:
+        version: "0.1.11"

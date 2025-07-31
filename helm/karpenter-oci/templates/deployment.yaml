@@ -40,7 +40,7 @@ spec:
           image: {{ include "karpenter-oci.image" . }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           args:
-            - --v={{ .Values.settings.logLevel }}
+            - --log-level={{ .Values.settings.logLevel }}
             - --config=/config/settings
           env:
             {{- with .Values.controller.env }}
