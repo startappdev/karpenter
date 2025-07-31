@@ -1,35 +1,37 @@
 module sigs.k8s.io/karpenter
 
-go 1.22
+go 1.24.0
+
+toolchain go1.24.5
 
 require (
 	github.com/Pallinder/go-randomdata v1.2.0
 	github.com/avast/retry-go v3.0.0+incompatible
-	github.com/awslabs/operatorpkg v0.0.0-20240125042004-b7bafc493195
+	github.com/awslabs/operatorpkg v0.0.0-20250721225858-4e7491c57aa5
 	github.com/docker/docker v28.3.2+incompatible
-	github.com/go-logr/logr v1.4.2
+	github.com/go-logr/logr v1.4.3
 	github.com/imdario/mergo v0.3.16
 	github.com/mitchellh/hashstructure/v2 v2.0.2
-	github.com/onsi/ginkgo/v2 v2.19.0
-	github.com/onsi/gomega v1.33.1
+	github.com/onsi/ginkgo/v2 v2.23.4
+	github.com/onsi/gomega v1.37.0
 	github.com/patrickmn/go-cache v2.1.0+incompatible
-	github.com/prometheus/client_golang v1.19.1
-	github.com/prometheus/client_model v0.6.1
-	github.com/samber/lo v1.39.0
+	github.com/prometheus/client_golang v1.22.0
+	github.com/prometheus/client_model v0.6.2
+	github.com/samber/lo v1.51.0
 	go.uber.org/multierr v1.11.0
 	go.uber.org/zap v1.27.0
-	golang.org/x/text v0.16.0
-	golang.org/x/time v0.5.0
-	k8s.io/api v0.30.2
-	k8s.io/apiextensions-apiserver v0.30.2
-	k8s.io/apimachinery v0.30.2
-	k8s.io/client-go v0.30.2
+	golang.org/x/text v0.26.0
+	golang.org/x/time v0.12.0
+	k8s.io/api v0.33.3
+	k8s.io/apiextensions-apiserver v0.33.0
+	k8s.io/apimachinery v0.33.3
+	k8s.io/client-go v0.33.3
 	k8s.io/cloud-provider v0.30.2
-	k8s.io/component-base v0.30.2
+	k8s.io/component-base v0.33.0
 	k8s.io/csi-translation-lib v0.30.2
 	k8s.io/klog/v2 v2.130.1
-	k8s.io/utils v0.0.0-20240502163921-fe8a2dddb1d0
-	sigs.k8s.io/controller-runtime v0.18.4
+	k8s.io/utils v0.0.0-20241104100929-3ea5e8cea738
+	sigs.k8s.io/controller-runtime v0.21.0
 )
 
 require (
@@ -85,7 +87,6 @@ require (
 	github.com/google/btree v1.1.3 // indirect
 	go.uber.org/automaxprocs v1.6.0 // indirect
 	go.yaml.in/yaml/v2 v2.4.2 // indirect
-	golang.org/x/exp v0.0.0-20240719175910-8a7402abbf56 // indirect
 	golang.org/x/sync v0.16.0 // indirect
 	sigs.k8s.io/randfill v1.0.0 // indirect
 )
