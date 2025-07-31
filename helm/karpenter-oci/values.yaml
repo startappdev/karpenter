@@ -84,7 +84,7 @@ affinity:
 livenessProbe:
   httpGet:
     path: /healthz
-    port: http-metrics
+    port: http
   initialDelaySeconds: 30
   periodSeconds: 10
   timeoutSeconds: 5
@@ -95,7 +95,7 @@ livenessProbe:
 readinessProbe:
   httpGet:
     path: /readyz
-    port: http-metrics
+    port: http
   initialDelaySeconds: 10
   periodSeconds: 10
   timeoutSeconds: 5

@@ -1,0 +1,23 @@
+# Apply this to your FluxCD repository to trigger reconciliation
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: flux-reconcile-karpenter
+  namespace: flux-system
+spec:
+  template:
+    spec:
+      serviceAccountName: flux-reconciler
+      restartPolicy: Never
+      containers:
+        - name: reconcile
+          image: fluxcd/flux-cli:v2.2.0
+          command:
+            - /bin/sh
+            - -c
+            - |
+              echo "Triggering reconciliation for Karpenter resources..."
+              flux reconcile source git karpenter --timeout=5m
+              flux reconcile helmrelease karpenter -n karpenter --timeout=10m
+              echo "Reconciliation triggered successfully"

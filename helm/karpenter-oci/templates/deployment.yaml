@@ -42,6 +42,8 @@ spec:
           args:
             - --log-level={{ .Values.settings.logLevel }}
           env:
+            - name: HEALTH_PROBE_PORT
+              value: "8081"
             {{- with .Values.controller.env }}
             {{- toYaml . | nindent 12 }}
             {{- end }}
@@ -121,6 +123,9 @@ spec:
           ports:
             - name: http-metrics
               containerPort: {{ .Values.metrics.port }}
+              protocol: TCP
+            - name: http
+              containerPort: 8081
               protocol: TCP
             - name: webhook
               containerPort: {{ .Values.webhook.port }}

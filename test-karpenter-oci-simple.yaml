@@ -1,0 +1,178 @@
+# Simplified test manifests for Karpenter OCI provider
+---
+# NodePool for E4 Flexible shapes
+apiVersion: karpenter.sh/v1
+kind: NodePool
+metadata:
+  name: oci-e4-flex-pool
+  namespace: karpenter
+spec:
+  template:
+    metadata:
+      labels:
+        karpenter.sh/nodepool: oci-e4-flex-pool
+        node-type: flexible
+        shape-family: e4
+    spec:
+      requirements:
+        - key: kubernetes.io/arch
+          operator: In
+          values: ["amd64"]
+        - key: kubernetes.io/os
+          operator: In
+          values: ["linux"]
+        - key: karpenter.sh/capacity-type
+          operator: In
+          values: ["on-demand"]
+        - key: node.kubernetes.io/instance-type
+          operator: In
+          values: ["VM.Standard.E4.Flex"]
+      taints:
+        - key: node-type
+          value: "flexible-e4"
+          effect: NoSchedule
+  disruption:
+    consolidationPolicy: WhenUnderutilized
+    consolidateAfter: 30s
+  limits:
+    cpu: "1000"
+    memory: "1000Gi"
+  weight: 100
+---
+# NodePool for E5 Flexible shapes
+apiVersion: karpenter.sh/v1
+kind: NodePool
+metadata:
+  name: oci-e5-flex-pool
+  namespace: karpenter
+spec:
+  template:
+    metadata:
+      labels:
+        karpenter.sh/nodepool: oci-e5-flex-pool
+        node-type: flexible
+        shape-family: e5
+    spec:
+      requirements:
+        - key: kubernetes.io/arch
+          operator: In
+          values: ["amd64"]
+        - key: kubernetes.io/os
+          operator: In
+          values: ["linux"]
+        - key: karpenter.sh/capacity-type
+          operator: In
+          values: ["on-demand"]
+        - key: node.kubernetes.io/instance-type
+          operator: In
+          values: ["VM.Standard.E5.Flex"]
+      taints:
+        - key: node-type
+          value: "flexible-e5"
+          effect: NoSchedule
+  disruption:
+    consolidationPolicy: WhenUnderutilized
+    consolidateAfter: 30s
+  limits:
+    cpu: "2000"
+    memory: "2000Gi"
+  weight: 150
+---
+# Test workload 1: Small app that triggers E4.Flex provisioning
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: test-e4-flex-app
+  namespace: default
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: test-e4-flex
+  template:
+    metadata:
+      labels:
+        app: test-e4-flex
+    spec:
+      tolerations:
+        - key: node-type
+          operator: Equal
+          value: flexible-e4
+          effect: NoSchedule
+      nodeSelector:
+        shape-family: e4
+      containers:
+        - name: stress
+          image: polinux/stress
+          command: ["stress"]
+          args: ["--cpu", "2", "--vm", "1", "--vm-bytes", "2G", "--timeout", "86400s"]
+          resources:
+            requests:
+              cpu: "2"
+              memory: "4Gi"
+            limits:
+              cpu: "4"
+              memory: "8Gi"
+---
+# Test workload 2: Larger app that triggers E5.Flex provisioning
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: test-e5-flex-app
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: test-e5-flex
+  template:
+    metadata:
+      labels:
+        app: test-e5-flex
+    spec:
+      tolerations:
+        - key: node-type
+          operator: Equal
+          value: flexible-e5
+          effect: NoSchedule
+      nodeSelector:
+        shape-family: e5
+      containers:
+        - name: stress
+          image: polinux/stress
+          command: ["stress"]
+          args: ["--cpu", "8", "--vm", "2", "--vm-bytes", "8G", "--timeout", "86400s"]
+          resources:
+            requests:
+              cpu: "8"
+              memory: "16Gi"
+            limits:
+              cpu: "16"
+              memory: "32Gi"
+---
+# Test workload 3: Simple nginx app
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: test-simple-app
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: test-simple
+  template:
+    metadata:
+      labels:
+        app: test-simple
+    spec:
+      containers:
+        - name: nginx
+          image: nginx:alpine
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
