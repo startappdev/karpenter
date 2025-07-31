@@ -1,0 +1,5 @@
+# Patch to update the GitRepository to use the start-io branch
+# Apply with: kubectl patch gitrepository karpenter -n flux-system --patch-file flux-gitrepository-patch.yaml
+spec:
+  ref:
+    branch: start-io

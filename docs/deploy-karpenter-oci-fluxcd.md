@@ -126,7 +126,7 @@ metadata:
 spec:
   interval: 1m
   ref:
-    branch: main
+    branch: start-io  # Change to the branch containing the Helm chart
   url: https://github.com/startappdev/karpenter.git
 ```
 
@@ -480,12 +480,30 @@ curl http://localhost:8080/metrics
 
 ### Common Issues
 
-1. **Instance Launch Failures**
+1. **Chart Not Found Error**
+   ```
+   reconciliation stalled invalid chart reference: stat /tmp/helmchart-flux-system-karpenter-karpenter-*/source/helm/karpenter-oci: no such file or directory
+   ```
+   
+   **Solution**: Update GitRepository to use the correct branch:
+   ```bash
+   # Check current branch
+   kubectl get gitrepository karpenter -n flux-system -o jsonpath='{.spec.ref.branch}'
+   
+   # Update to start-io branch
+   kubectl patch gitrepository karpenter -n flux-system --type merge -p '{"spec":{"ref":{"branch":"start-io"}}}'
+   
+   # Force reconciliation
+   flux reconcile source git karpenter -n flux-system
+   flux reconcile helmrelease karpenter -n karpenter
+   ```
+
+2. **Instance Launch Failures**
    - Check IAM policies are correctly configured
    - Verify subnet IDs and availability
    - Check OCI quotas and limits
 
-2. **Authentication Errors**
+3. **Authentication Errors**
    - Ensure instance principal is enabled on OKE nodes
    - Verify dynamic group membership rules
 
