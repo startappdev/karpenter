@@ -1,5 +1,5 @@
 # Build stage - use official Karpenter approach
-FROM public.ecr.aws/docker/library/golang:1.22-alpine AS builder
+FROM public.ecr.aws/docker/library/golang:1.23-alpine AS builder
 
 # Install dependencies
 RUN apk add --no-cache git
