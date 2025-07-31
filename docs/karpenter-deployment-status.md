@@ -13,8 +13,8 @@
 
 ```bash
 Policy Name: karpenter-policy
-Policy ID: ocid1.policy.oc1..aaaaaaaac7mp6nq6idb2p2bpubz4xiq4jebpnc2vs2ycbfj4i7ab53k73j7a
-Compartment: ocid1.compartment.oc1..aaaaaaaalr5oi5mfqpjedsdsyn3vxn2fh2bltqezqrmk4bi7gaq6i245qnkq
+Policy ID: ocid1.policy.oc1..<your-policy-ocid>
+Compartment: ocid1.compartment.oc1..<your-compartment-ocid>
 ```
 
 ## Notes on Invalid Resource Types
@@ -38,7 +38,7 @@ These permissions are not required for basic Karpenter functionality.
 
 ### View Current Policy
 ```bash
-oci iam policy get --policy-id ocid1.policy.oc1..aaaaaaaac7mp6nq6idb2p2bpubz4xiq4jebpnc2vs2ycbfj4i7ab53k73j7a
+oci iam policy get --policy-id ocid1.policy.oc1..<your-policy-ocid>
 ```
 
 ### View Dynamic Group

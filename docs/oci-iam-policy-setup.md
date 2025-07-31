@@ -36,7 +36,7 @@ If the dynamic group doesn't exist, create it:
 
 ```bash
 # Set your variables
-COMPARTMENT_ID="ocid1.compartment.oc1..aaaaaaaalr5oi5mfqpjedsdsyn3vxn2fh2bltqezqrmk4bi7gaq6i245qnkq"
+COMPARTMENT_ID="ocid1.compartment.oc1..<your-compartment-ocid>"
 CLUSTER_ID="<your-cluster-ocid>"
 
 # Create dynamic group
@@ -56,9 +56,9 @@ Based on testing, here's the policy that actually works with OCI:
 ```bash
 cat > karpenter-policy.json <<'EOF'
 [
-  "Allow dynamic-group karpenter-nodes-dg to manage instances in compartment id ocid1.compartment.oc1..aaaaaaaalr5oi5mfqpjedsdsyn3vxn2fh2bltqezqrmk4bi7gaq6i245qnkq",
-  "Allow dynamic-group karpenter-nodes-dg to use virtual-network-family in compartment id ocid1.compartment.oc1..aaaaaaaalr5oi5mfqpjedsdsyn3vxn2fh2bltqezqrmk4bi7gaq6i245qnkq",
-  "Allow dynamic-group karpenter-nodes-dg to manage volume-family in compartment id ocid1.compartment.oc1..aaaaaaaalr5oi5mfqpjedsdsyn3vxn2fh2bltqezqrmk4bi7gaq6i245qnkq"
+  "Allow dynamic-group karpenter-nodes-dg to manage instances in compartment id ocid1.compartment.oc1..<your-compartment-ocid>",
+  "Allow dynamic-group karpenter-nodes-dg to use virtual-network-family in compartment id ocid1.compartment.oc1..<your-compartment-ocid>",
+  "Allow dynamic-group karpenter-nodes-dg to manage volume-family in compartment id ocid1.compartment.oc1..<your-compartment-ocid>"
 ]
 EOF
 ```
@@ -67,7 +67,7 @@ Create the policy:
 
 ```bash
 oci iam policy create \
-  --compartment-id ocid1.compartment.oc1..aaaaaaaalr5oi5mfqpjedsdsyn3vxn2fh2bltqezqrmk4bi7gaq6i245qnkq \
+  --compartment-id ocid1.compartment.oc1..<your-compartment-ocid> \
   --name "karpenter-policy" \
   --description "Policy for Karpenter to manage instances" \
   --statements file://karpenter-policy.json
@@ -127,13 +127,13 @@ After creating the policy:
 ```bash
 # List policies
 oci iam policy list \
-  --compartment-id ocid1.compartment.oc1..aaaaaaaalr5oi5mfqpjedsdsyn3vxn2fh2bltqezqrmk4bi7gaq6i245qnkq \
+  --compartment-id ocid1.compartment.oc1..<your-compartment-ocid> \
   --query "data[?name=='karpenter-policy'].{name:name, id:id}" \
   --output table
 
 # Get policy details
 POLICY_ID=$(oci iam policy list \
-  --compartment-id ocid1.compartment.oc1..aaaaaaaalr5oi5mfqpjedsdsyn3vxn2fh2bltqezqrmk4bi7gaq6i245qnkq \
+  --compartment-id ocid1.compartment.oc1..<your-compartment-ocid> \
   --name "karpenter-policy" \
   --query 'data[0].id' \
   --raw-output)

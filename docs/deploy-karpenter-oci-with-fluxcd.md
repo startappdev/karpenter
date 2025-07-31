@@ -487,7 +487,7 @@ spec:
     settings:
       clusterName: "OKE-ASH-STG-OKE"
       ociRegion: "us-ashburn-1"
-      ociCompartmentId: "ocid1.compartment.oc1..aaaaaaaalr5oi5mfqpjedsdsyn3vxn2fh2bltqezqrmk4bi7gaq6i245qnkq"
+      ociCompartmentId: "ocid1.compartment.oc1..<your-compartment-ocid>"
       ociClusterId: "${OCI_CLUSTER_ID}"
       ociSubnetIds:
         - "${OCI_SUBNET_ID_1}"
