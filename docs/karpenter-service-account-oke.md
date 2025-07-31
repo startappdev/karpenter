@@ -30,29 +30,11 @@ oci iam dynamic-group create \
 
 ### 1.2 Create IAM Policies
 
-Create policies that allow the dynamic group to manage instances:
-
-```bash
-# Create policy
-cat <<EOF > karpenter-policy.json
-{
-  "statements": [
-    "Allow dynamic-group karpenter-nodes-dg to manage instances in compartment id $COMPARTMENT_ID",
-    "Allow dynamic-group karpenter-nodes-dg to use virtual-network-family in compartment id $COMPARTMENT_ID",
-    "Allow dynamic-group karpenter-nodes-dg to use compute-capacity-reports in compartment id $COMPARTMENT_ID",
-    "Allow dynamic-group karpenter-nodes-dg to read compute-global-price-list in tenancy",
-    "Allow dynamic-group karpenter-nodes-dg to manage volume-family in compartment id $COMPARTMENT_ID",
-    "Allow dynamic-group karpenter-nodes-dg to use oke-clusters in compartment id $COMPARTMENT_ID"
-  ]
-}
-EOF
-
-oci iam policy create \
-  --compartment-id $COMPARTMENT_ID \
-  --name "karpenter-policy" \
-  --description "Policy for Karpenter to manage instances" \
-  --statements file://karpenter-policy.json
-```
+For creating IAM policies, please refer to the [OCI IAM Policy Setup Guide](./oci-iam-policy-setup.md) which provides:
+- Step-by-step instructions for creating the dynamic group and policies
+- Multiple policy options (basic, OKE-specific, flexible shapes)
+- Troubleshooting for common errors
+- Valid OCI resource types reference
 
 ## Step 2: Create Kubernetes Resources
 
