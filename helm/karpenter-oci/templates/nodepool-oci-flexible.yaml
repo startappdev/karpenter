@@ -1,0 +1,105 @@
+{{- if .Values.nodePools.enabled }}
+apiVersion: karpenter.sh/v1
+kind: NodePool
+metadata:
+  name: oci-flexible-e4-pool
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "karpenter-oci.labels" . | nindent 4 }}
+spec:
+  # Template for OCI Flexible Nodes
+  template:
+    metadata:
+      labels:
+        karpenter.sh/nodepool: oci-flexible-e4-pool
+        node-type: flexible
+        shape-family: e4
+    spec:
+      requirements:
+        - key: kubernetes.io/arch
+          operator: In
+          values: ["amd64"]
+        - key: kubernetes.io/os
+          operator: In
+          values: ["linux"]
+        - key: karpenter.sh/capacity-type
+          operator: In
+          values: ["on-demand"]
+        - key: node.kubernetes.io/instance-type
+          operator: In
+          values: ["VM.Standard.E4.Flex"]
+      nodeClassRef:
+        kind: NodeClass
+        name: oci-nodeclass
+      taints:
+        - key: karpenter.sh/new-node
+          value: "true"
+          effect: NoSchedule
+  
+  # Disruption settings
+  disruption:
+    consolidationPolicy: WhenUnderutilized
+    consolidateAfter: 30s
+    budgets:
+      - nodes: "10%"
+  
+  # Resource limits for this pool
+  limits:
+    cpu: "1000"
+    memory: "1000Gi"
+  
+  # Weight for scheduling preference
+  weight: 100
+---
+apiVersion: karpenter.sh/v1
+kind: NodePool
+metadata:
+  name: oci-flexible-e5-pool
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "karpenter-oci.labels" . | nindent 4 }}
+spec:
+  # Template for OCI E5 Flexible Nodes
+  template:
+    metadata:
+      labels:
+        karpenter.sh/nodepool: oci-flexible-e5-pool
+        node-type: flexible
+        shape-family: e5
+    spec:
+      requirements:
+        - key: kubernetes.io/arch
+          operator: In
+          values: ["amd64"]
+        - key: kubernetes.io/os
+          operator: In
+          values: ["linux"]
+        - key: karpenter.sh/capacity-type
+          operator: In
+          values: ["on-demand"]
+        - key: node.kubernetes.io/instance-type
+          operator: In
+          values: ["VM.Standard.E5.Flex"]
+      nodeClassRef:
+        kind: NodeClass
+        name: oci-nodeclass
+      taints:
+        - key: karpenter.sh/new-node
+          value: "true"
+          effect: NoSchedule
+  
+  # Disruption settings
+  disruption:
+    consolidationPolicy: WhenUnderutilized
+    consolidateAfter: 30s
+    budgets:
+      - nodes: "10%"
+  
+  # Resource limits for this pool
+  limits:
+    cpu: "2000"
+    memory: "2000Gi"
+  
+  # Weight for scheduling preference (higher priority for E5)
+  weight: 150
+{{- end }}

@@ -218,3 +218,8 @@ rbac:
   create: true
   # -- Additional rules for the cluster role
   additionalRules: []
+
+# NodePool configuration
+nodePools:
+  # -- Enable creation of default NodePools
+  enabled: false

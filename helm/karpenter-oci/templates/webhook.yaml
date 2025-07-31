@@ -11,6 +11,7 @@ webhooks:
       service:
         name: {{ include "karpenter-oci.fullname" . }}
         namespace: {{ .Release.Namespace }}
+        port: {{ .Values.webhook.port }}
         path: "/validate-karpenter-sh-v1-nodepool"
     failurePolicy: Fail
     admissionReviewVersions: ["v1", "v1beta1"]
@@ -26,6 +27,7 @@ webhooks:
       service:
         name: {{ include "karpenter-oci.fullname" . }}
         namespace: {{ .Release.Namespace }}
+        port: {{ .Values.webhook.port }}
         path: "/validate-karpenter-sh-v1-nodeclaim"
     failurePolicy: Fail
     admissionReviewVersions: ["v1", "v1beta1"]
@@ -49,6 +51,7 @@ webhooks:
       service:
         name: {{ include "karpenter-oci.fullname" . }}
         namespace: {{ .Release.Namespace }}
+        port: {{ .Values.webhook.port }}
         path: "/mutate-karpenter-sh-v1-nodepool"
     failurePolicy: Fail
     admissionReviewVersions: ["v1", "v1beta1"]
@@ -64,6 +67,7 @@ webhooks:
       service:
         name: {{ include "karpenter-oci.fullname" . }}
         namespace: {{ .Release.Namespace }}
+        port: {{ .Values.webhook.port }}
         path: "/mutate-karpenter-sh-v1-nodeclaim"
     failurePolicy: Fail
     admissionReviewVersions: ["v1", "v1beta1"]

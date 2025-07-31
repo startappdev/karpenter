@@ -1,0 +1,25 @@
+{{- if .Values.nodePools.enabled }}
+apiVersion: karpenter.k8s.aws/v1beta1
+kind: NodeClass
+metadata:
+  name: oci-nodeclass
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "karpenter-oci.labels" . | nindent 4 }}
+spec:
+  # OCI-specific configuration
+  instanceStorePolicy: RAID0
+  
+  # User data for node initialization
+  userData: |
+    #!/bin/bash
+    echo "Initializing OCI Karpenter node"
+    # Additional node initialization can be added here
+  
+  # Instance metadata options
+  metadataOptions:
+    httpEndpoint: enabled
+    httpProtocolIPv6: disabled
+    httpPutResponseHopLimit: 2
+    httpTokens: required
+{{- end }}
