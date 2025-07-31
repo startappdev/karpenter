@@ -122,6 +122,11 @@ oci:
   # If set, the following values will be read from the secret instead of values below
   existingSecret: ""
   
+  # -- Key in the existing secret containing a YAML config file (optional)
+  # If set, the secret is expected to have a single key with YAML content
+  # If not set, the secret is expected to have individual keys for each config value
+  existingSecretConfigKey: ""
+  
   # Direct configuration (not recommended for production - use existingSecret instead)
   # -- OCI region (e.g., us-ashburn-1, us-phoenix-1)
   region: ""

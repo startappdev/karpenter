@@ -50,6 +50,12 @@ spec:
               value: {{ required "settings.clusterName is required" .Values.settings.clusterName }}
             {{- if .Values.oci.existingSecret }}
             # Use values from existing secret (e.g., SealedSecret)
+            {{- if .Values.oci.existingSecretConfigKey }}
+            # Mount config file from secret and read it
+            - name: OCI_CONFIG_FILE
+              value: /etc/oci-secret/{{ .Values.oci.existingSecretConfigKey }}
+            {{- else }}
+            # Read individual keys from secret
             - name: OCI_REGION
               valueFrom:
                 secretKeyRef:
@@ -86,6 +92,7 @@ spec:
                 secretKeyRef:
                   name: {{ .Values.oci.existingSecret }}
                   key: enableDynamicShapes
+            {{- end }}
             {{- else }}
             # Use values directly from Helm values (not recommended for production)
             - name: OCI_REGION
@@ -131,6 +138,11 @@ spec:
             - name: config
               mountPath: /config
               readOnly: true
+            {{- if and .Values.oci.existingSecret .Values.oci.existingSecretConfigKey }}
+            - name: oci-secret
+              mountPath: /etc/oci-secret
+              readOnly: true
+            {{- end }}
             {{- with .Values.controller.volumeMounts }}
             {{- toYaml . | nindent 12 }}
             {{- end }}
@@ -138,6 +150,11 @@ spec:
         - name: config
           configMap:
             name: {{ include "karpenter-oci.fullname" . }}-settings
+        {{- if and .Values.oci.existingSecret .Values.oci.existingSecretConfigKey }}
+        - name: oci-secret
+          secret:
+            secretName: {{ .Values.oci.existingSecret }}
+        {{- end }}
         {{- with .Values.controller.volumes }}
         {{- toYaml . | nindent 8 }}
         {{- end }}

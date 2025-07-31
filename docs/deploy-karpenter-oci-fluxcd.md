@@ -169,11 +169,13 @@ spec:
     
     # OCI-specific configuration
     oci:
-      # Reference the existing sealed secret containing OCI configuration
-      existingSecret: "karpenter-oci-config"  # Name of your SealedSecret
+      # For your existing secret with config.yaml key:
+      existingSecret: "oci-config"  # Your existing secret name
+      existingSecretConfigKey: "config.yaml"  # The key containing YAML config
       
-      # These values are not needed when using existingSecret
-      # They will be read from the secret instead
+      # OR for a secret with individual keys:
+      # existingSecret: "karpenter-oci-config"
+      # existingSecretConfigKey: ""  # Leave empty for individual keys
     
     # Resources
     resources:
@@ -201,12 +203,57 @@ spec:
         operator: Exists
 ```
 
-### 3.4 Create SealedSecret for OCI Configuration
+### 3.4 Configure OCI Secret
 
-Create a sealed secret containing your OCI configuration:
+The Helm chart supports two formats for the OCI configuration secret:
+
+#### Option A: Using Your Existing Secret (config.yaml format)
+
+If you already have a secret like this:
+```yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: oci-config
+  namespace: karpenter
+data:
+  config.yaml: <base64-encoded-yaml>
+```
+
+Where the decoded `config.yaml` contains (minimal example):
+```yaml
+region: us-phoenix-1
+compartmentID: ocid1.compartment.oc1..aaaaaaaa...  # Note: capital 'ID'
+```
+
+Or a more complete configuration:
+```yaml
+region: us-phoenix-1
+compartmentID: ocid1.compartment.oc1..aaaaaaaa...
+clusterID: ocid1.cluster.oc1..aaaaaaaa...
+subnetIDs:
+  - ocid1.subnet.oc1..aaaaaaaa...
+  - ocid1.subnet.oc1..bbbbbbbb...
+imageID: ocid1.image.oc1..aaaaaaaa...
+useInstancePrincipal: true
+enableDynamicShapes: true
+```
+
+**Note**: The Karpenter code will need to handle both naming conventions (compartmentID vs compartmentId).
+
+Configure the Helm release to use it:
+```yaml
+oci:
+  existingSecret: "oci-config"
+  existingSecretConfigKey: "config.yaml"
+```
+
+#### Option B: Create a New Secret with Individual Keys
+
+Create a sealed secret with individual keys:
 
 ```bash
-# First create a regular secret
+# Create a regular secret
 kubectl create secret generic karpenter-oci-config \
   --namespace=karpenter \
   --from-literal=region="us-ashburn-1" \
@@ -225,23 +272,11 @@ kubeseal --format=yaml < oci-config-secret.yaml > sealed-oci-config.yaml
 rm oci-config-secret.yaml
 ```
 
-Place the sealed secret in your Git repository:
+Configure the Helm release to use it:
 ```yaml
-# clusters/your-cluster/karpenter/sealed-oci-config.yaml
-apiVersion: bitnami.com/v1alpha1
-kind: SealedSecret
-metadata:
-  name: karpenter-oci-config
-  namespace: karpenter
-spec:
-  encryptedData:
-    region: "..." # Your sealed values
-    compartmentId: "..."
-    clusterId: "..."
-    subnetIds: "..."
-    imageId: "..."
-    useInstancePrincipal: "..."
-    enableDynamicShapes: "..."
+oci:
+  existingSecret: "karpenter-oci-config"
+  # existingSecretConfigKey is left empty for individual keys
 ```
 
 ### 3.5 Create ServiceAccount and RBAC
