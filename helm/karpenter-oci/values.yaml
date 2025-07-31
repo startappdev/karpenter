@@ -118,6 +118,11 @@ settings:
 
 # OCI-specific settings
 oci:
+  # -- Name of existing secret containing OCI configuration (recommended)
+  # If set, the following values will be read from the secret instead of values below
+  existingSecret: ""
+  
+  # Direct configuration (not recommended for production - use existingSecret instead)
   # -- OCI region (e.g., us-ashburn-1, us-phoenix-1)
   region: ""
   # -- OCI compartment OCID

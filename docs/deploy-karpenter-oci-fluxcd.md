@@ -169,15 +169,11 @@ spec:
     
     # OCI-specific configuration
     oci:
-      region: "us-ashburn-1"  # Change to your region
-      compartmentId: "<your-compartment-ocid>"
-      clusterId: "<your-cluster-ocid>"
-      subnetIds:
-        - "<subnet-ocid-1>"
-        - "<subnet-ocid-2>"
-      imageId: "<oke-node-image-ocid>"
-      useInstancePrincipal: true
-      enableDynamicShapes: true
+      # Reference the existing sealed secret containing OCI configuration
+      existingSecret: "karpenter-oci-config"  # Name of your SealedSecret
+      
+      # These values are not needed when using existingSecret
+      # They will be read from the secret instead
     
     # Resources
     resources:
@@ -205,7 +201,50 @@ spec:
         operator: Exists
 ```
 
-### 3.4 Create ServiceAccount and RBAC
+### 3.4 Create SealedSecret for OCI Configuration
+
+Create a sealed secret containing your OCI configuration:
+
+```bash
+# First create a regular secret
+kubectl create secret generic karpenter-oci-config \
+  --namespace=karpenter \
+  --from-literal=region="us-ashburn-1" \
+  --from-literal=compartmentId="ocid1.compartment.oc1..aaaaaaaa..." \
+  --from-literal=clusterId="ocid1.cluster.oc1.iad.aaaaaaaa..." \
+  --from-literal=subnetIds="ocid1.subnet.oc1.iad.aaaaaaaa...,ocid1.subnet.oc1.iad.bbbbbbb..." \
+  --from-literal=imageId="ocid1.image.oc1.iad.aaaaaaaa..." \
+  --from-literal=useInstancePrincipal="true" \
+  --from-literal=enableDynamicShapes="true" \
+  --dry-run=client -o yaml > oci-config-secret.yaml
+
+# Seal the secret
+kubeseal --format=yaml < oci-config-secret.yaml > sealed-oci-config.yaml
+
+# Clean up temporary file
+rm oci-config-secret.yaml
+```
+
+Place the sealed secret in your Git repository:
+```yaml
+# clusters/your-cluster/karpenter/sealed-oci-config.yaml
+apiVersion: bitnami.com/v1alpha1
+kind: SealedSecret
+metadata:
+  name: karpenter-oci-config
+  namespace: karpenter
+spec:
+  encryptedData:
+    region: "..." # Your sealed values
+    compartmentId: "..."
+    clusterId: "..."
+    subnetIds: "..."
+    imageId: "..."
+    useInstancePrincipal: "..."
+    enableDynamicShapes: "..."
+```
+
+### 3.5 Create ServiceAccount and RBAC
 
 Since you mentioned you already have a SealedSecret for the ServiceAccount, ensure it includes:
 
@@ -221,7 +260,7 @@ metadata:
 # Only create if you need additional permissions beyond the default
 ```
 
-### 3.5 Create Kustomization
+### 3.6 Create Kustomization
 
 ```yaml
 # clusters/your-cluster/karpenter/kustomization.yaml
@@ -232,9 +271,10 @@ namespace: karpenter
 resources:
   - namespace.yaml
   - source.yaml
+  - sealed-oci-config.yaml  # The SealedSecret with OCI configuration
   - rbac.yaml  # If not using Helm-managed RBAC
   - release.yaml
-  # Your existing SealedSecret.yaml
+  # Your existing SealedSecret.yaml for ServiceAccount if needed
 ```
 
 ## Step 4: Deploy with FluxCD

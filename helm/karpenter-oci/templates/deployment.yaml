@@ -48,6 +48,46 @@ spec:
             {{- end }}
             - name: CLUSTER_NAME
               value: {{ required "settings.clusterName is required" .Values.settings.clusterName }}
+            {{- if .Values.oci.existingSecret }}
+            # Use values from existing secret (e.g., SealedSecret)
+            - name: OCI_REGION
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.oci.existingSecret }}
+                  key: region
+            - name: OCI_COMPARTMENT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.oci.existingSecret }}
+                  key: compartmentId
+            - name: OCI_CLUSTER_ID
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.oci.existingSecret }}
+                  key: clusterId
+            - name: OCI_SUBNET_IDS
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.oci.existingSecret }}
+                  key: subnetIds
+            - name: OCI_IMAGE_ID
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.oci.existingSecret }}
+                  key: imageId
+                  optional: true
+            - name: OCI_USE_INSTANCE_PRINCIPAL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.oci.existingSecret }}
+                  key: useInstancePrincipal
+            - name: ENABLE_OCI_DYNAMIC_SHAPES
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.oci.existingSecret }}
+                  key: enableDynamicShapes
+            {{- else }}
+            # Use values directly from Helm values (not recommended for production)
             - name: OCI_REGION
               value: {{ required "oci.region is required" .Values.oci.region }}
             - name: OCI_COMPARTMENT_ID
@@ -66,6 +106,7 @@ spec:
               value: {{ .Values.oci.useInstancePrincipal | quote }}
             - name: ENABLE_OCI_DYNAMIC_SHAPES
               value: {{ .Values.oci.enableDynamicShapes | quote }}
+            {{- end }}
           ports:
             - name: http-metrics
               containerPort: {{ .Values.metrics.port }}
