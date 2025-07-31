@@ -466,10 +466,106 @@ kubectl auth can-i --as=system:serviceaccount:karpenter:karpenter \
 
 ### 5.1 Using Sealed Secrets (Recommended)
 
-If you're using Sealed Secrets with FluxCD:
+If you're using Sealed Secrets with FluxCD, follow these steps to create the sealed secret:
+
+#### 5.1.1 Install Sealed Secrets Controller
+
+First, ensure you have the Sealed Secrets controller installed:
+
+```bash
+# Install Sealed Secrets controller if not already installed
+kubectl apply -f https://github.com/bitnami-labs/sealed-secrets/releases/download/v0.24.0/controller.yaml
+
+# Install kubeseal CLI
+# For macOS:
+brew install kubeseal
+
+# For Linux:
+wget https://github.com/bitnami-labs/sealed-secrets/releases/download/v0.24.0/kubeseal-0.24.0-linux-amd64.tar.gz
+tar -xvzf kubeseal-0.24.0-linux-amd64.tar.gz
+sudo install -m 755 kubeseal /usr/local/bin/kubeseal
+```
+
+#### 5.1.2 Create the OCI Configuration File
+
+First, create a temporary file with your OCI configuration:
+
+```bash
+# Create a temporary config file with your actual values
+cat > /tmp/oci-config.yaml <<EOF
+region: us-phoenix-1
+compartmentID: ocid1.compartment.oc1..xxxxxxxxxx
+clusterID: ocid1.cluster.oc1.phx.xxxxxxxxxx
+subnetIDs:
+  - ocid1.subnet.oc1.phx.xxxxxxxxxx
+  - ocid1.subnet.oc1.phx.yyyyyyyyyy
+imageID: ocid1.image.oc1.phx.xxxxxxxxxx
+instancePrincipal:
+  enabled: true
+defaultShapes:
+  - VM.Standard.E4.Flex
+  - VM.Standard.E5.Flex
+EOF
+```
+
+#### 5.1.3 Create a Regular Secret First
+
+Create a regular Kubernetes secret from the config file:
+
+```bash
+# Create the secret (but don't apply it)
+kubectl create secret generic oci-config \
+  --namespace karpenter \
+  --from-file=config.yaml=/tmp/oci-config.yaml \
+  --dry-run=client \
+  -o yaml > /tmp/oci-config-secret.yaml
+
+# Clean up the temporary config file
+rm /tmp/oci-config.yaml
+```
+
+#### 5.1.4 Create the Sealed Secret
+
+Convert the regular secret to a sealed secret:
+
+```bash
+# Create sealed secret
+kubeseal \
+  --format=yaml \
+  --cert=<(kubectl get secret -n kube-system sealed-secrets-key -o jsonpath='{.data.tls\.crt}' | base64 -d) \
+  < /tmp/oci-config-secret.yaml \
+  > karpenter/oci-config-sealed-secret.yaml
+
+# Clean up temporary files
+rm /tmp/oci-config-secret.yaml
+```
+
+#### 5.1.5 Update Kustomization
+
+Update your `karpenter/kustomization.yaml` to use the sealed secret:
 
 ```yaml
-# Create a sealed secret for OCI configuration
+# karpenter/kustomization.yaml
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: karpenter
+
+resources:
+  - namespace.yaml
+  - service-account.yaml
+  - clusterrole.yaml
+  - clusterrolebinding.yaml
+  - role.yaml
+  - oci-config-sealed-secret.yaml  # Changed from oci-config-secret.yaml
+  - release.yaml
+```
+
+#### 5.1.6 The Sealed Secret File
+
+Your sealed secret will look like this:
+
+```yaml
+# karpenter/oci-config-sealed-secret.yaml
 apiVersion: bitnami.com/v1alpha1
 kind: SealedSecret
 metadata:
@@ -477,17 +573,36 @@ metadata:
   namespace: karpenter
 spec:
   encryptedData:
-    config.yaml: <encrypted-config-data>
+    config.yaml: AgCF3... # Long encrypted string
   template:
+    metadata:
+      name: oci-config
+      namespace: karpenter
     type: Opaque
 ```
 
-### 5.2 Using SOPS
+### 5.2 Alternative: Using SOPS
 
-If using SOPS with FluxCD:
+If using SOPS with FluxCD, here's how to create the encrypted secret:
+
+#### 5.2.1 Create SOPS Configuration
+
+First, create a `.sops.yaml` file in your repository root:
 
 ```yaml
-# karpenter-oci-config.enc.yaml
+# .sops.yaml
+creation_rules:
+  - path_regex: .*\.enc\.yaml$
+    encrypted_regex: ^(data|stringData)$
+    age: age1... # Your age public key
+```
+
+#### 5.2.2 Create the Secret File
+
+Create the secret file that will be encrypted:
+
+```yaml
+# karpenter/oci-config-secret.enc.yaml
 apiVersion: v1
 kind: Secret
 metadata:
@@ -497,8 +612,82 @@ type: Opaque
 stringData:
   config.yaml: |
     region: us-phoenix-1
-    compartmentID: ENC[AES256_GCM,data:xxx...]
-    # ... rest of encrypted config
+    compartmentID: ocid1.compartment.oc1..xxxxxxxxxx
+    clusterID: ocid1.cluster.oc1.phx.xxxxxxxxxx
+    subnetIDs:
+      - ocid1.subnet.oc1.phx.xxxxxxxxxx
+      - ocid1.subnet.oc1.phx.yyyyyyyyyy
+    imageID: ocid1.image.oc1.phx.xxxxxxxxxx
+    instancePrincipal:
+      enabled: true
+    defaultShapes:
+      - VM.Standard.E4.Flex
+      - VM.Standard.E5.Flex
+```
+
+#### 5.2.3 Encrypt the File
+
+```bash
+# Encrypt the file
+sops -e -i karpenter/oci-config-secret.enc.yaml
+```
+
+#### 5.2.4 Update Kustomization for SOPS
+
+```yaml
+# karpenter/kustomization.yaml
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: karpenter
+
+resources:
+  - namespace.yaml
+  - service-account.yaml
+  - clusterrole.yaml
+  - clusterrolebinding.yaml
+  - role.yaml
+  - oci-config-secret.enc.yaml  # SOPS encrypted file
+  - release.yaml
+```
+
+### 5.3 Alternative: Using External Secrets Operator
+
+If using External Secrets Operator with OCI Vault:
+
+```yaml
+# karpenter/oci-config-external-secret.yaml
+apiVersion: external-secrets.io/v1beta1
+kind: ExternalSecret
+metadata:
+  name: oci-config
+  namespace: karpenter
+spec:
+  refreshInterval: 1h
+  secretStoreRef:
+    name: oci-vault
+    kind: SecretStore
+  target:
+    name: oci-config
+    creationPolicy: Owner
+  data:
+    - secretKey: config.yaml
+      remoteRef:
+        key: karpenter-oci-config  # OCI Vault secret name
+```
+
+### 5.4 Verify Secret Creation
+
+After applying your chosen secret method:
+
+```bash
+# Verify the secret exists
+kubectl -n karpenter get secret oci-config
+
+# Verify the secret contains the config.yaml key
+kubectl -n karpenter get secret oci-config -o jsonpath='{.data}' | jq 'keys'
+
+# Decode and verify the content (be careful not to expose secrets)
+kubectl -n karpenter get secret oci-config -o jsonpath='{.data.config\.yaml}' | base64 -d
 ```
 
 ## Step 6: Post-Deployment Verification
