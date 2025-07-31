@@ -46,8 +46,6 @@ spec:
             {{- with .Values.controller.env }}
             {{- toYaml . | nindent 12 }}
             {{- end }}
-            - name: CLUSTER_NAME
-              value: {{ required "settings.clusterName is required" .Values.settings.clusterName }}
             {{- if .Values.oci.existingSecret }}
             # Use values from existing secret (e.g., SealedSecret)
             {{- if .Values.oci.existingSecretConfigKey }}
@@ -92,9 +90,16 @@ spec:
                 secretKeyRef:
                   name: {{ .Values.oci.existingSecret }}
                   key: enableDynamicShapes
+            - name: CLUSTER_NAME
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.oci.existingSecret }}
+                  key: clusterName
             {{- end }}
             {{- else }}
             # Use values directly from Helm values (not recommended for production)
+            - name: CLUSTER_NAME
+              value: {{ required "settings.clusterName is required" .Values.settings.clusterName }}
             - name: OCI_REGION
               value: {{ required "oci.region is required" .Values.oci.region }}
             - name: OCI_COMPARTMENT_ID

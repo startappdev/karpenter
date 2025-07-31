@@ -1,0 +1,58 @@
+apiVersion: helm.toolkit.fluxcd.io/v2beta2
+kind: HelmRelease
+metadata:
+  name: karpenter
+  namespace: flux-system
+spec:
+  interval: 1m
+  targetNamespace: karpenter
+  install:
+    createNamespace: true
+  chart:
+    spec:
+      chart: ./helm/karpenter-oci
+      sourceRef:
+        kind: GitRepository
+        name: karpenter
+      version: "0.1.9"
+  values:
+    image:
+      repository: ghcr.io/startappdev/karpenter
+      tag: "start-io-1da0394"
+    
+    # Reference your existing secret
+    oci:
+      existingSecret: "oci-config"
+      existingSecretConfigKey: "config.yaml"
+    
+    # The controller still needs these as environment variables
+    controller:
+      env:
+        - name: OCI_REGION
+          value: "us-ashburn-1"  # Fixed to match your cluster location
+        - name: OCI_COMPARTMENT_ID
+          value: "ocid1.compartment.oc1..aaaaaaaalr5oi5mfqpjedsdsyn3vxn2fh2bltqezqrmk4bi7gaq6i245qnkq"
+        - name: OCI_CLUSTER_ID
+          value: "ocid1.cluster.oc1.iad.aaaaaaaazqquz2h5rspvdpafhnnmorehg2w3n2pveworuuovbcijgzk2jgda"
+        - name: OCI_SUBNET_IDS
+          value: "ocid1.subnet.oc1.iad.aaaaaaaaznwweno45m7klssbzt2kyl6qa4ec34335patiolemkti6d4ioita,ocid1.subnet.oc1.iad.aaaaaaaau6uekgrdd446pvmqt3zfhwkpnncn2jytqwlhokurxb54mnh46tca"
+        - name: OCI_IMAGE_ID
+          value: "ocid1.image.oc1.iad.aaaaaaaaspio4cg2ttycualigcfb74yd5ixp5ovryxfjesm7y7xiayjf53dq"
+        - name: CLUSTER_NAME
+          value: "your-cluster-name"  # REPLACE with your actual cluster name
+        - name: OCI_USE_INSTANCE_PRINCIPAL
+          value: "true"
+        - name: ENABLE_OCI_DYNAMIC_SHAPES
+          value: "true"
+    
+    # Node selector and tolerations
+    nodeSelector:
+      node_pool: generic
+    
+    tolerations:
+      - key: CriticalAddonsOnly
+        operator: Exists
+      - key: node_pool
+        operator: Equal
+        value: generic
+        effect: NoSchedule

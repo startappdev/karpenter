@@ -125,7 +125,7 @@ settings:
 oci:
   # -- Name of existing secret containing OCI configuration (recommended)
   # If set, the following values will be read from the secret instead of values below
-  existingSecret: ""
+  existingSecret: "oci-config-new"
   
   # -- Key in the existing secret containing a YAML config file (optional)
   # If set, the secret is expected to have a single key with YAML content

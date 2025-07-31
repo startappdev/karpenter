@@ -1,0 +1,72 @@
+apiVersion: helm.toolkit.fluxcd.io/v2beta2
+kind: HelmRelease
+metadata:
+  name: karpenter
+  namespace: flux-system
+spec:
+  interval: 1m
+  targetNamespace: karpenter
+  install:
+    createNamespace: true
+  chart:
+    spec:
+      chart: ./helm/karpenter-oci
+      sourceRef:
+        kind: GitRepository
+        name: karpenter
+      version: "0.1.9"
+  values:
+    image:
+      repository: ghcr.io/startappdev/karpenter
+      tag: "start-io-1da0394"
+    
+    # Reference the sealed secret with individual keys
+    oci:
+      existingSecret: "oci-config-new"
+      # Leave existingSecretConfigKey empty to use individual keys
+      existingSecretConfigKey: ""
+    
+    # settings.clusterName is still required by the Helm template
+    settings:
+      clusterName: "oke-cluster"  # This will also be read from secret
+      logLevel: info
+      batchMaxDuration: 10s
+      batchIdleDuration: 1s
+      featureGates:
+        dynamicProvisioning: true
+        drift: true
+        spotInterruption: true
+    
+    # Node selector and tolerations
+    nodeSelector:
+      node_pool: generic
+    
+    tolerations:
+      - key: CriticalAddonsOnly
+        operator: Exists
+      - key: node_pool
+        operator: Equal
+        value: generic
+        effect: NoSchedule
+---
+# Add this SealedSecret to your FluxCD repository
+# It contains all the required OCI configuration values as individual keys
+apiVersion: bitnami.com/v1alpha1
+kind: SealedSecret
+metadata:
+  name: oci-config-new
+  namespace: karpenter
+spec:
+  encryptedData:
+    clusterId: AgBoy2CJJUkFBYmB9agoebV/Vri+4tDQeAYzMEnIzU99nqx7GWpmMu+LUf6G5QjfTG8VrJu48NFOKmfr17beKCl0VF03QgqAIuHEXw0VowOTQUcpAPBNJyoxtFZ14tyd+aoTteeEYojWigkgQO9Xo5NaPa3yJLpCUCxidjhMZeeyGAu3MB1DMBNfZn5yYRIHWOVmhT/qElwQYTTwWtvuffskZGigMnvDlFeIkpdvwFBhwa6V8VT8Nx6FouxB/dXgBmDoomU+3668TkFOWBR/gdmKa1BrCquqmQCimNf5OzAHAJoCGMkg7ip6dLIwGBT/879DXF/kblLioC8ACSm0qtDh5C7HXedgjTF6EOYmc3juV1tesXLG7F7QBfKJFa/G8Vc+Pf0NM97FeWEsrFhtqToxfmOedOHf5uRSVQIQWITCGRzTjXYheDMIq3zNvnpTCjfJHbjCUhx98iJROFQp4a/2RR5T+bmlKHjz2Q/6se2fy2oNshtNuXwwDqZ5c9G8q7hiOF0aMB+EpUinXJ6Fp+KIY9W4Lp2vQeMHHnSfP2WhaioxE4YHzRiaQ45hmMwByhgna5DFMAfCwQZd+eRWbMTpHXsKPmTiNucZD6Au2irT2lL5jaVRhTPVcba2QlYUlB1qv2HON24Gay0HXMixZ4RPjwm+DRKytyluyvLH59tLnvtYbgH4BfThLT44BBCs7rTHyHjJgo0YxUmiW4H7C8Qk6iWAzYuL02iyPCPWlbw/Q+jonO7vzSIt2skVlXGT92sdtvrwJyZbqvLPvz2lYkgY0sT+Czc1wND+XhBivwiJB3md
+    clusterName: AgBOHhE2D5pgagX1KsDmSbDoBBWiMC5RG2t3ZCfr5kxsLkL97MRplBcIWqMW3AYzEBmo7r6Fh89xAy2nog6hJR+Qp0JGN6timPFkhvXuX3VW47YZ4Ww5bbptmK4kQvYCBFUWlTMHHozyUfcbAWZXwAXpOeEa5GfnEYJvcdv+04roApDyfSbEuvvb8Ql7q9laSvC6oodD7oT9+RcdrRhfNCOwTtY6nMY5bg3rtU8gPxV4BFVq1eLmxqcF0leSm2CDPYS2r2nQc5qHCgHGjq2LTrbqTF2vsVVSQks/WnHx5+9p2EnM801drMpCqeBcHIEJ6jBkf1uegDI/sY9dOU+ptWo19duMh5FLaQGZvMMYLHne7Gy4Z9h+Y9yaN5eVmAkm2ynhF+IWZkEYHqVe7lbHj+qC8aqCRIYfbioFkKR5HQKkP0Vn05++gqWWiMANx8Zy23K/VHhDTgPmLfREaqzB5JxI46x2Zn0HP674DsJDkxK133gJl2TgzEMHEXNsJmDbsINvma1bvlpobVrJamnJ1IlBYWC8UvlCPq4gpj36SFJ0ZKBaVkzuRJRrgFz3kncleqCyxyZ6w10M0XCfjSGekEOv+mK5dKkdPpxXE126i+Q/YcGAhWKWKYGHmgEE9W/oOe4es2OD3BUlYooR+QB6b5cp+37qWUdNfFV46UjxwuP5xkzrevfN4H1KOLVQXrsEWAWcrjpsxH2bWbePgA==
+    compartmentId: AgAHjVit95dZmujZYh5EWnw2jMN5Sf/dYHRccAJURoLUBuEQMIPYDQhH+0VRHIJirhsR8JFzj/2HNbEqVrzKsBUy7rT4KRF3o997lES1tL0oRIRO+IkAR7wRFrW93jHAxTmtkIPa472Uv0WAMyDAU4VQ6aFbYtMgrpmNxsyo1smg3VDYHxUQBgXYdMjNaAZZB9Oj//AIQEr3kwZhV9hcRIiaa2aMk98ZOAFbpqjm+/llIVgV54hBVgyxuBtpZIslEYbA2j17fLP63gPLIGKpinycQxiOHqnbvgcD7fR3ZpXdX4BFfzYelWtHwECzOkM39bXb9gvzr9S1as0J0SPISUUQASDtJJco3hjS8gaHHHU0nESuQYocew2VGskiM901Ka6Zv9jQk28AC67wLyDR++FdMku4ObeLxx/WJbxZQR1NKc3siIEEFkmwyAJ8VIqnM1VNeXEi81A2QYB0Z+Ql74FhjsaA3q5SXgi9qRn/tixUxmD1sbddZiQYs/22402RkmuM9cNw772o+AIU551Y3KnZsRAHQ0zClLB8Ou58XB3vEHObbnCW+r8CHZVJkjcbpwIpiR1gvhucHS2T8YpcShs38R7D5yHBXvrYW2wR2CWTFGU94yynYEqhX6MMwgqxGPnSN1/enZy0sy0pJ3iDL+Xug+iYZ5Mj2E3PWo6Ig90rh07tsKZPNtcn0J17jw9u/gV2TY2aPIPE5woy9cHJRZg3DXNLDVDBq6EA4lSq0BG2aCNhS/N4zivqpWJbIRW461bMJLZL6R1gxnbJ8XM+y9L93SwZYaWtXPSXNCRc+TLHFXLFXw==
+    enableDynamicShapes: AgAZcfxWG9TLlo9IDgvZhGTYlY02jWzdyG2/tWaY+ux72zd7/znKEETTgfSMVteqM1z0A8a3MAYXthcPDIyonwG8nXOyRoswk4RPVumn4yfjcaSYLjFyfAtRghsMQCCzA7DwO/QVAYloWM3lNc1Tkm5PfDEt+37eyWFrBERPEhytitwnT/60TExY8+ROebCzv4hf7hE14JqiY+i6K7sLIl0dLIQSJtCZlJS+iqgiZEfs3usJBtMtRe/gbGyBn7Oyfz8siFcGvwr7jMx9JESg/NM1xYyAuoo7bNFhDjamMNr1tMgDQGcLnG5WEfHKErqHLesFtbalxwWk2Q6CPo13YP2YJaeViMfpSfvPbn7mkSF/LgOYInumvpp3K9US8Gp8R9hdCGyZZkZu8oO1AANZfzFJgugNkyOm/BbtaIlqJpOEpYew5sMyfbxzsjZ5TSAXRozi7DdZoW4TOpyxZSY+CSGbIrbGENLLHp/5qp0a8RZGAwYIbRm/F+GSeDh+V28Bqh/n4IpBEZWgsCP/ajx5WlAIz27Q7Ad1mm3rnK53ioc1DVXWA6gF/8Ov6kSBfOLTLPkE9SmmQyT0FuvhuCjpydml+fTYZGdxekGZx28yz0r4x7xpv+pJdDVKRRhVI2ctcPKI0rYf935q4kSM7R6uZlGVDEn5sKwSKK9k/091ilt/BfXKyH8UHVqZmsPv0ny/AjoDAVAS
+    imageId: AgAN4BSxrZ7/lZU/5wBaD+I2Nn6glcySMSM9bC/Jx2J9PYKdPEDHPoJrryW4JZHaYaY/8C0uMYR4UgLVB3iIurmzf018PUanmWGY9yhYjdBpHtKwqT2H7cp2hQS6jTpg7W2lPIEfLf077hNJtsh4EZa7qikRjARtMpio+f4r9XpjkAWOBanyIlIErh7Z1cu3pDvmH4oh3j9/pirrTfYD2EDEVsiW5qGGll+A1SZQviOaLKSN/hug4i/cizT7pBPXuYQkGoyCnvSB3IjbIF/LqbObEOPE63VpiTjGGyiDcINGtTvTaUCKVmUgMbLIyWrSVFvxrjhx4NummR7M6TjgX3pfK8kYhyDvx9Ew3MiOM+TOdy1JzjUQ5X/TBM9zqRrVUBzjuDTAXvG4sZDuGca8onEehFbrOGR2EBu2NQwzyjhHZEhyUUxfj9D9pwKlBbpMKqLKpec+x7ia4nA8nUqcLO5sLeQbN1sYVA9uxpUQ46bD5sRakgbVOCfNIBTaeaoOlhFRv2CWcBHyNfnrzzRJUdNoOwNzOQRT1PZFll7RJb0yqqhheLx2lWAdCAlcRTfflF3HaRuVVIv2/Mrz4gl8aB5mSVdc1kqTqQeD//UkXTsfnOvv/nGI3W9C8+CHSAZC6jsGWKBt768DF/d9Qt49J2SZjPiyH06kuZxt25H73T9nRsA+dv9N818U9OcL6AON7hgfxtvTyX6P0bFWmuNYuoUs3ciyRigba1hVETQJ76/2lcj08oJk4eJCy/PhFs/RFKvJzrFaio+3T9W7qRAbKwqHKlWkiEwBibHKafi9ptHY3w==
+    region: AgBCPcWTr1dY9Jstpmd9D6u9yZpkOFW5Qk0AWY8tga84zRlpBKUhtWqgW8tiw43K3mmxkQGu5/nj1qnQAPZFo0PXwO0BeZPNtARskOGvYV/nQu32TYYMTkiqu+IOpHq+uTcRZpg7pPASiegCNfKDZERtuLYbHqqLLLlkMDNB5BHz8UdWhSyTbbuLMz8Zg+jgUczUyXf+Wm+jHyOSilEqzeyT9d8x1se25UPNAH6twMwxiLp9Ri0xJkEw0+zdcn4LHCL7wU0nHWOqRKWJGPYxK9TZqaqOK5muZiVq5CXERZgXxjLCIgmqHA6QqxlDo0HbnCDnlXF2HcbSEPzZjBCSHtrXMoQnU8qTmlRXfIwMLVNpqouVUqfMAhmmqqAvjKj6OHTNQdBKkCb4IVWnkjHGrfcm67GO93S4bM8g+xe5TKNjZ08JG3vSr74JzRDEvSjW/rUs6r8xFMn3JYHKhoX8V4NRdZvMDp3SUgQSjuQVbRKkMH+4TGvC5r95jximM19YGqyAjUyaOCUq9fh5csEQJQ4siMs2yaUz+VMgMjTdo5fu+vknqZVJVR8pJnzFrh7S8QHm+USATiLrJnqccZS/2psCwpp8XkzRmDNqJjU5CEQvOWuAfGe437C9XVNq3EXJ5N63l5PemJSv9mWenzpANrsSkiIELLGISpv/3BFhLHg5dkDfsc1B6Nd6qdrJM9eiexq2LyI+yRKKbU1Z7Ac=
+    subnetIds: AgBCMgkKC1YEOY7SXZz/K+/HxidnFddhA1Lgy1DSY9TLGl1BqI+XDvn44uP2vGTjfgq/ndh+69P5Pz39zmAK6UidyfJSS7+OGiEI/KnmIeIC/T0sC4slpzxSoc4RBauYFPLokSL9XQeQb5z+zeeObwjAseO1E6+miRep4K9nyEQ8+0sW7EKrqQS4SN/CWeuTyKP++GSXFZLd5GGT+pi2lJJd7qvdx1ypUsz0UESrGIX6C39gVIzcyTuci9zeH5yEgc2OnaaI4FCmR1+VaTe7LWvpEnEWSlVpDrBI/6iNDzLa2G5nxzT+1Vz1jzM+RdU3AbcDdFevZrFJynAMkqjMhKfv3Bpk7Yenn9JHn0UiuDaWZEiyVw4jlhj8m23hgvu1P3/T0mx9SHZow/uNJqw3TB/zFuWrq9OgxJaE8qTxaTTFLzJTseXHDbS/6v3It2/EjZKjaiqSF7opUHIZauqEHcotjWlOws++xxAlihFgVSpJlgZ2MjwQjgZ9pz3SXbzTdSMj10SUBOLR7J48xP0QS8et+FyXObvLkNbCwGV0VV3VAP+BE3ipH4W8LKp+4G6y6cwtzKm+r9Yhwqavbqjq5ynkYwWNaNmn6M1r/MqGtFdW0sa5Pt3OZtL/XJ0G9HYjcfPh90ExxonqNkD7i3GQvu9QrtDFdCWVH/aG8xg+m4m+dnakBup10gCXaWGr9lREjoZ/n6EkNweoBs1Tx7VeeH9vz2mZniL1Zj5gT87E8SQDRtaDlNHiSVqfnfdpN/zbkeDF5JISpkx+mKYRI+ZdC94nVlONXtXRh+iFZzojylNHTJ27QcAXi7Inmk4YwpLPLaMp2u005er529Ni0jRa0tyxdAPDh8K41PFcancrShGFx7j6r+LfDxHAkDVEVno+/IDb1H+l5qj5pkW3LIbeK1gc1UfQ
+    useInstancePrincipal: AgCcRvESQzffNlnlWrZ6JF4S3tYS867jQ6pFHn5JjnbVmTLHo3P1qIN2aV1zyqTh80vkwls5OpIkhtS3Pjq8UGw3NfXtEMepQliZ6JgjH7iQfKxDYIDTAZpMGBgUwBYI6pXHZ2jpQwccwmQd0CMKCkbgKKYEAYXGtn6mHoI1zJ4+aYodd20C1TlVr3zdBTzKmXrJoK5DLqPIwpa1qRjZs8oy2Uosnhz/710F5cRmLSlpGHEkFJ9JCXeMOYB008ztsbsSsx1t1Pu+Ygx4vcVaLPGJ6E+UtV0Csm+kmUf61kApggIpUKoRoGtw/309lrqKzxnjTtrvCUfpw2+pb3c0cp7IJW62g2eNNVzw5ObRGqPNwk1jA8G7dvlXsnrEMXjtnyl9FAppN4mvweY6aQNPRzzYAQ+XTxOuDGOQ5r4Wg59niLaghdlFw2SjBKAGcMMhmiirDKnmCuHD0n6QLUG0FUzndwLFHDITDyACQmi4buAcC9rZ9IRTv9+mMVSIb6tb4wCLTF726yNfEZQRtlPdC5Jc5aAensWptO1UFOJU4YE1lTHYAvBbuYWxWHAKln3AXClSXvKSZBihUpSWgK0Hs0SJIk8DPicHq02/WToeLI9spb4UiGc/nc5ZYYPtUfBETQQse7JLl73qEV+WNQt723+9+1Pnphd9cHhulxyEt1+xdw41Ce2XvabNL/fk/wmhya2PfGZS
+  template:
+    metadata:
+      name: oci-config-new
+      namespace: karpenter
