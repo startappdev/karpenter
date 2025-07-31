@@ -14,7 +14,8 @@ image:
   tag: ""
 
 # -- Image pull secrets for private registries
-imagePullSecrets: []
+imagePullSecrets:
+  - name: start-github-pull-secret
 
 # -- Override the name of the chart
 nameOverride: ""
