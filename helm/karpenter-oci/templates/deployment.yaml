@@ -41,7 +41,6 @@ spec:
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           args:
             - --log-level={{ .Values.settings.logLevel }}
-            - --config=/config/settings
           env:
             {{- with .Values.controller.env }}
             {{- toYaml . | nindent 12 }}
