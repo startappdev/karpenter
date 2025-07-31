@@ -60,11 +60,16 @@ resources:
 # -- Node selector for pod scheduling
 nodeSelector:
   kubernetes.io/os: linux
+  node_pool: generic
 
 # -- Tolerations for pod scheduling
 tolerations:
   - key: CriticalAddonsOnly
     operator: Exists
+  - key: node_pool
+    operator: Equal
+    value: generic
+    effect: NoSchedule
 
 # -- Affinity rules for pod scheduling
 affinity:

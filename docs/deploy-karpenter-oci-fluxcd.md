@@ -6,7 +6,9 @@ This guide provides complete instructions for deploying our custom Karpenter wit
 
 Before starting, ensure you have:
 
-- ✅ OKE cluster running
+- ✅ OKE cluster running with:
+  - A generic node pool labeled with `node_pool=generic`
+  - Taints on generic nodes: `node_pool=generic:NoSchedule`
 - ✅ kubectl configured to access your cluster
 - ✅ FluxCD installed in your cluster
 - ✅ OCI CLI configured with appropriate credentials
@@ -192,16 +194,22 @@ spec:
       runAsGroup: 65532
       fsGroup: 65532
     
-    # Node selector to run on OKE nodes
+    # Node selector to run on generic node pool
     nodeSelector:
       kubernetes.io/os: linux
-      karpenter.sh/controller: "true"  # Optional: dedicate nodes
+      node_pool: generic
     
-    # Tolerations
+    # Tolerations for generic node pool
     tolerations:
       - key: CriticalAddonsOnly
         operator: Exists
+      - key: node_pool
+        operator: Equal
+        value: generic
+        effect: NoSchedule
 ```
+
+> **Note**: The default values include `node_pool: generic` selector and toleration. If your generic node pool uses different labels/taints, override these values accordingly.
 
 ### 3.4 Configure OCI Secret
 
