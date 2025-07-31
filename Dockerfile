@@ -15,14 +15,8 @@ WORKDIR /workspace
 # Copy go.mod and go.sum first
 COPY go.mod go.sum ./
 
-# Debug: Show Go environment and files
-RUN go version && \
-    echo "=== Files in workspace ===" && \
-    ls -la && \
-    echo "=== go.mod content (first 10 lines) ===" && \
-    head -10 go.mod && \
-    echo "=== Attempting go mod download ===" && \
-    go mod download -x
+# Download dependencies
+RUN go mod download
 
 # Copy source code
 COPY . .
