@@ -20,7 +20,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/samber/lo"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	"sigs.k8s.io/controller-runtime/pkg/log"
@@ -28,7 +27,6 @@ import (
 	v1 "sigs.k8s.io/karpenter/pkg/apis/v1"
 	"sigs.k8s.io/karpenter/pkg/cloudprovider"
 	"sigs.k8s.io/karpenter/pkg/scheduling"
-	"sigs.k8s.io/karpenter/pkg/utils/resources"
 )
 
 // InstanceTypeProvider handles instance type operations
@@ -130,7 +128,7 @@ func (p *InstanceTypeProvider) shapeToInstanceType(shape *Shape) *cloudprovider.
 	requirements := scheduling.NewRequirements(
 		scheduling.NewRequirement(corev1.LabelInstanceTypeStable, corev1.NodeSelectorOpIn, shape.Name),
 		scheduling.NewRequirement(corev1.LabelArchStable, corev1.NodeSelectorOpIn, "amd64"),
-		scheduling.NewRequirement(v1.LabelInstanceCategory, corev1.NodeSelectorOpIn, "general-purpose"),
+		scheduling.NewRequirement("karpenter.sh/instance-category", corev1.NodeSelectorOpIn, "general-purpose"),
 	)
 	
 	// Calculate capacity
