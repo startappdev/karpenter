@@ -1,0 +1,102 @@
+apiVersion: helm.toolkit.fluxcd.io/v2beta2
+kind: HelmRelease
+metadata:
+  name: karpenter
+  namespace: flux-system
+spec:
+  interval: 1m
+  targetNamespace: karpenter
+  install:
+    createNamespace: true
+  chart:
+    spec:
+      chart: ./helm/karpenter-oci
+      sourceRef:
+        kind: GitRepository
+        name: karpenter
+      version: "0.1.9"
+  values:
+    image:
+      repository: ghcr.io/startappdev/karpenter
+      tag: "start-io-1da0394"
+    
+    controller:
+      env:
+        - name: OCI_REGION
+          value: "us-ashburn-1"  # REPLACE: Your OCI region
+        - name: OCI_COMPARTMENT_ID
+          value: "ocid1.compartment.oc1..exampleuniqueID"  # REPLACE: Your compartment OCID
+        - name: OCI_CLUSTER_ID
+          value: "ocid1.cluster.oc1.iad.exampleuniqueID"  # REPLACE: Your OKE cluster OCID
+        - name: OCI_SUBNET_IDS
+          value: "ocid1.subnet.oc1.iad.exampleID1,ocid1.subnet.oc1.iad.exampleID2"  # REPLACE: Comma-separated subnet OCIDs
+        - name: OCI_IMAGE_ID
+          value: "ocid1.image.oc1.iad.exampleuniqueID"  # REPLACE: OKE-compatible node image OCID
+        - name: CLUSTER_NAME
+          value: "your-cluster-name"  # REPLACE: Your cluster name
+        - name: OCI_USE_INSTANCE_PRINCIPAL
+          value: "true"  # Set to "false" if using user principal
+        - name: ENABLE_OCI_DYNAMIC_SHAPES
+          value: "true"
+        - name: CLOUD_PROVIDER
+          value: "oci"
+        - name: ENABLE_PROFILING
+          value: "false"
+        - name: FEATURE_GATES
+          value: "DynamicProvisioning=true"
+        - name: KARPENTER_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+    
+    # Node selector and tolerations
+    nodeSelector:
+      node_pool: generic
+    
+    tolerations:
+      - key: CriticalAddonsOnly
+        operator: Exists
+      - key: node_pool
+        operator: Equal
+        value: generic
+        effect: NoSchedule
+    
+    # OCI configuration from existing secret (if available)
+    oci:
+      # If you have an existing secret with OCI config, uncomment and set:
+      # existingSecret: "oci-config"
+      # existingSecretConfigKey: "config"
+      
+      # Or provide values directly (not recommended for production):
+      region: "us-ashburn-1"
+      useInstancePrincipal: true
+      enableDynamicShapes: true
+    
+    # Webhook configuration
+    webhook:
+      enabled: true
+      port: 8443
+      metricsPort: 8001
+    
+    # Metrics configuration
+    metrics:
+      enabled: true
+      port: 8080
+      serviceMonitor:
+        enabled: false
+    
+    # Pod disruption budget
+    podDisruptionBudget:
+      enabled: true
+      maxUnavailable: 1
+    
+    # Priority class
+    priorityClassName: "system-cluster-critical"
+    
+    # Resources
+    resources:
+      limits:
+        memory: 1Gi
+      requests:
+        cpu: 200m
+        memory: 500Mi
