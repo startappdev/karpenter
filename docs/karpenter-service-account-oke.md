@@ -227,18 +227,18 @@ subjects:
 
 ## Step 3: FluxCD Configuration
 
-### 3.1 Create Flux Kustomization for Service Account
+### 3.1 Create Flux Kustomization
 
 ```yaml
-# flux-system/karpenter-sa-kustomization.yaml
+# flux-system/karpenter-kustomization.yaml
 apiVersion: kustomize.toolkit.fluxcd.io/v1
 kind: Kustomization
 metadata:
-  name: karpenter-service-account
+  name: karpenter
   namespace: flux-system
 spec:
   interval: 10m
-  path: "./infrastructure/karpenter/service-account"
+  path: "./karpenter"
   prune: true
   sourceRef:
     kind: GitRepository
@@ -248,30 +248,32 @@ spec:
       kind: ServiceAccount
       name: karpenter
       namespace: karpenter
+    - apiVersion: helm.toolkit.fluxcd.io/v2beta1
+      kind: HelmRelease
+      name: karpenter
+      namespace: karpenter
 ```
 
 ### 3.2 Directory Structure
 
-Create the following directory structure in your Git repository:
+Create the following simplified directory structure in your Git repository:
 
 ```
-infrastructure/
-└── karpenter/
-    ├── service-account/
-    │   ├── kustomization.yaml
-    │   ├── namespace.yaml
-    │   ├── service-account.yaml
-    │   ├── clusterrole.yaml
-    │   ├── clusterrolebinding.yaml
-    │   └── role.yaml
-    └── helm-release/
-        └── karpenter.yaml
+karpenter/
+├── kustomization.yaml
+├── namespace.yaml
+├── service-account.yaml
+├── clusterrole.yaml
+├── clusterrolebinding.yaml
+├── role.yaml
+├── oci-config-secret.yaml
+└── release.yaml
 ```
 
 ### 3.3 Kustomization File
 
 ```yaml
-# infrastructure/karpenter/service-account/kustomization.yaml
+# karpenter/kustomization.yaml
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 namespace: karpenter
@@ -282,6 +284,8 @@ resources:
   - clusterrole.yaml
   - clusterrolebinding.yaml
   - role.yaml
+  - oci-config-secret.yaml
+  - release.yaml
 
 # Add any patches or configurations
 patches:
@@ -295,10 +299,10 @@ patches:
       name: karpenter
 ```
 
-### 3.4 Helm Release Configuration
+### 3.4 OCI Configuration Secret
 
 ```yaml
-# infrastructure/karpenter/helm-release/karpenter.yaml
+# karpenter/oci-config-secret.yaml
 apiVersion: v1
 kind: Secret
 metadata:
@@ -319,7 +323,12 @@ stringData:
     defaultShapes:
       - VM.Standard.E4.Flex
       - VM.Standard.E5.Flex
----
+```
+
+### 3.5 Helm Release Configuration
+
+```yaml
+# karpenter/release.yaml
 apiVersion: helm.toolkit.fluxcd.io/v2beta1
 kind: HelmRelease
 metadata:
@@ -335,9 +344,7 @@ spec:
         kind: HelmRepository
         name: karpenter
         namespace: flux-system
-  dependsOn:
-    - name: karpenter-service-account
-      namespace: flux-system
+  # No dependsOn needed since all resources are in the same kustomization
   values:
     serviceAccount:
       create: false  # We already created it
@@ -415,7 +422,7 @@ spec:
 
 ```bash
 # Add all files to git
-git add infrastructure/karpenter/
+git add karpenter/
 git commit -m "Add Karpenter service account and RBAC"
 git push
 ```
@@ -424,14 +431,18 @@ git push
 
 ```bash
 # Apply the Kustomization
-kubectl apply -f flux-system/karpenter-sa-kustomization.yaml
+kubectl apply -f flux-system/karpenter-kustomization.yaml
 
 # Watch the reconciliation
-flux reconcile kustomization karpenter-service-account --with-source
+flux reconcile kustomization karpenter --with-source
 
 # Check service account creation
 kubectl -n karpenter get serviceaccount karpenter
 kubectl -n karpenter describe serviceaccount karpenter
+
+# Check HelmRelease
+kubectl -n karpenter get helmrelease karpenter
+kubectl -n karpenter describe helmrelease karpenter
 ```
 
 ### 4.3 Verify Permissions
@@ -530,7 +541,7 @@ kubectl get namespace karpenter
 flux get kustomizations -A | grep karpenter
 
 # Force reconciliation
-flux reconcile kustomization karpenter-service-account --with-source
+flux reconcile kustomization karpenter --with-source
 ```
 
 ### Permission Denied Errors
