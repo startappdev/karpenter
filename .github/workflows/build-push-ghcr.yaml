@@ -220,7 +220,7 @@ jobs:
           
           # Try multiple possible tags
           IMAGE_FOUND=false
-          for TAG in "${{ github.ref_name }}" "oci-latest" "start-io-${{ github.sha:0:7 }}"; do
+          for TAG in "${{ github.ref_name }}" "oci-latest" "start-io-${GITHUB_SHA:0:7}"; do
             echo "Trying tag: $TAG" >> $GITHUB_STEP_SUMMARY
             if trivy image --format table --severity CRITICAL,HIGH,MEDIUM \
               "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${TAG}" >> $GITHUB_STEP_SUMMARY 2>&1; then
