@@ -321,10 +321,10 @@ spec:
   chart:
     spec:
       chart: karpenter
-      version: "0.32.0"  # Use appropriate version
+      version: "1.5.0"  # Latest stable version
       sourceRef:
         kind: HelmRepository
-        name: karpenter
+        name: karpenter-oci
         namespace: flux-system
   # No dependsOn needed since all resources are in the same kustomization
   values:
@@ -384,18 +384,19 @@ spec:
       runAsNonRoot: true
 ```
 
-### 3.5 HelmRepository Configuration
+### 3.6 HelmRepository Configuration
 
 ```yaml
-# flux-system/karpenter-helmrepo.yaml
+# flux-system/karpenter-oci-helmrepo.yaml
 apiVersion: source.toolkit.fluxcd.io/v1beta2
 kind: HelmRepository
 metadata:
-  name: karpenter
+  name: karpenter-oci
   namespace: flux-system
 spec:
   interval: 30m
-  url: https://charts.karpenter.sh
+  type: oci
+  url: oci://public.ecr.aws/karpenter
 ```
 
 ## Step 4: Deploy with FluxCD
