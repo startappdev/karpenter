@@ -158,10 +158,12 @@ spec:
         {{- with .Values.controller.volumes }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
-      {{- with .Values.nodeSelector }}
       nodeSelector:
+        {{- with .Values.nodeSelector }}
         {{- toYaml . | nindent 8 }}
-      {{- end }}
+        {{- end }}
+        # Always include node_pool selector for generic nodes
+        node_pool: generic
       {{- with .Values.affinity }}
       affinity:
         {{- toYaml . | nindent 8 }}
