@@ -19,7 +19,7 @@ COPY . .
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
     -ldflags="-w -s -X main.version=${VERSION:-dev}" \
     -a -installsuffix cgo \
-    -o karpenter ./cmd/controller/main.go
+    -o karpenter ./kwok/main.go
 
 # Runtime stage - using distroless for minimal attack surface
 FROM gcr.io/distroless/static:nonroot
