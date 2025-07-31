@@ -205,17 +205,17 @@ jobs:
       - name: Check if SARIF file exists
         id: check_sarif
         run: |
-          if [ -f "trivy-results.sarif" ]; then
+          if [ -f "trivy-results.sarif" ] && [ -s "trivy-results.sarif" ]; then
             echo "sarif_exists=true" >> $GITHUB_OUTPUT
+            echo "SARIF file exists and is not empty"
           else
             echo "sarif_exists=false" >> $GITHUB_OUTPUT
-            echo "Creating empty SARIF file"
-            echo '{"version":"2.1.0","$schema":"https://raw.githubusercontent.com/oasis-tcs/sarif-spec/master/Schemata/sarif-schema-2.1.0.json","runs":[]}' > trivy-results.sarif
+            echo "SARIF file does not exist or is empty - skipping upload"
           fi
 
       - name: Upload Trivy scan results to GitHub Security
         uses: github/codeql-action/upload-sarif@v3
-        if: always()
+        if: steps.check_sarif.outputs.sarif_exists == 'true'
         with:
           sarif_file: 'trivy-results.sarif'
 
