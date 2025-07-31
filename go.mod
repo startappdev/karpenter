@@ -1,13 +1,13 @@
 module sigs.k8s.io/karpenter
 
-go 1.23.0
+go 1.24.0
 
-toolchain go1.23.6
+toolchain go1.24.5
 
 require (
 	github.com/Pallinder/go-randomdata v1.2.0
 	github.com/avast/retry-go v3.0.0+incompatible
-	github.com/awslabs/operatorpkg v0.0.0-20240805231134-67d0acfb6306
+	github.com/awslabs/operatorpkg v0.0.0-20250721225858-4e7491c57aa5
 	github.com/docker/docker v28.3.2+incompatible
 	github.com/go-logr/logr v1.4.3
 	github.com/imdario/mergo v0.3.16
@@ -22,16 +22,16 @@ require (
 	go.uber.org/zap v1.27.0
 	golang.org/x/text v0.27.0
 	golang.org/x/time v0.12.0
-	k8s.io/api v0.30.3
-	k8s.io/apiextensions-apiserver v0.30.1
-	k8s.io/apimachinery v0.30.3
-	k8s.io/client-go v0.30.3
+	k8s.io/api v0.33.3
+	k8s.io/apiextensions-apiserver v0.33.0
+	k8s.io/apimachinery v0.33.3
+	k8s.io/client-go v0.33.3
 	k8s.io/cloud-provider v0.30.0
-	k8s.io/component-base v0.30.1
+	k8s.io/component-base v0.33.0
 	k8s.io/csi-translation-lib v0.30.0
 	k8s.io/klog/v2 v2.130.1
 	k8s.io/utils v0.0.0-20241104100929-3ea5e8cea738
-	sigs.k8s.io/controller-runtime v0.18.4
+	sigs.k8s.io/controller-runtime v0.21.0
 )
 
 require (
@@ -62,7 +62,7 @@ require (
 	github.com/prometheus/common v0.62.0 // indirect
 	github.com/prometheus/procfs v0.15.1 // indirect
 	github.com/robfig/cron/v3 v3.0.1
-	github.com/spf13/cobra v1.8.1 // indirect
+	github.com/spf13/cobra v1.8.1
 	github.com/spf13/pflag v1.0.6 // indirect
 	github.com/x448/float16 v0.8.4 // indirect
 	golang.org/x/net v0.41.0 // indirect
@@ -74,7 +74,7 @@ require (
 	google.golang.org/protobuf v1.36.6 // indirect
 	gopkg.in/evanphx/json-patch.v4 v4.12.0 // indirect
 	gopkg.in/inf.v0 v0.9.1 // indirect
-	gopkg.in/yaml.v3 v3.0.1 // indirect
+	gopkg.in/yaml.v3 v3.0.1
 	k8s.io/kube-openapi v0.0.0-20250318190949-c8a335a9a2ff // indirect
 	sigs.k8s.io/json v0.0.0-20241010143419-9aa6b5e7a4b3 // indirect
 	sigs.k8s.io/structured-merge-diff/v4 v4.6.0 // indirect
