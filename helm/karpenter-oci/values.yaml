@@ -59,7 +59,6 @@ resources:
 
 # -- Node selector for pod scheduling
 nodeSelector:
-  kubernetes.io/os: linux
   node_pool: generic
 
 # -- Tolerations for pod scheduling

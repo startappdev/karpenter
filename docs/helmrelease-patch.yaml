@@ -1,0 +1,14 @@
+# Patch to add nodeSelector and tolerations to HelmRelease
+# Apply with: kubectl patch helmrelease karpenter -n karpenter --type merge --patch-file helmrelease-patch.yaml
+spec:
+  values:
+    nodeSelector:
+      kubernetes.io/os: linux
+      node_pool: generic
+    tolerations:
+      - key: CriticalAddonsOnly
+        operator: Exists
+      - key: node_pool
+        operator: Equal
+        value: generic
+        effect: NoSchedule
