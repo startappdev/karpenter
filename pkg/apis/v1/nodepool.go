@@ -56,6 +56,10 @@ type NodePoolSpec struct {
 	// +kubebuilder:validation:Maximum:=100
 	// +optional
 	Weight *int32 `json:"weight,omitempty"`
+	// DynamicProvisioning enables precise resource matching for cloud providers that support flexible instance configurations.
+	// When enabled, Karpenter will provision nodes with exact CPU and memory matching pod requirements.
+	// +optional
+	DynamicProvisioning *DynamicProvisioning `json:"dynamicProvisioning,omitempty"`
 }
 
 type Disruption struct {
@@ -373,4 +377,130 @@ func GetIntStrFromValue(str string) intstr.IntOrString {
 		return intstr.FromInt(intVal)
 	}
 	return intstr.FromString(str)
+}
+
+// DynamicProvisioning enables precise resource matching for cloud providers that support flexible instance configurations.
+type DynamicProvisioning struct {
+	// Enabled determines whether dynamic provisioning is active for this NodePool
+	// +kubebuilder:default:=false
+	// +optional
+	Enabled bool `json:"enabled"`
+	// Strategy determines how resources are matched to instance configurations
+	// +kubebuilder:validation:Enum:={exact-fit,best-fit,cost-optimized}
+	// +kubebuilder:default:="cost-optimized"
+	// +optional
+	Strategy ProvisioningStrategy `json:"strategy,omitempty"`
+	// CapacityType specifies the distribution between preemptible and on-demand instances
+	// +optional
+	CapacityType CapacityTypeRatio `json:"capacityType,omitempty"`
+	// Constraints define the boundaries for dynamic shape provisioning
+	// +required
+	Constraints DynamicConstraints `json:"constraints"`
+	// Overhead specifies system-reserved resources on nodes
+	// +optional
+	Overhead *SystemOverhead `json:"overhead,omitempty"`
+	// Buffers define headroom percentages for resource allocation
+	// +optional
+	Buffers *ResourceBuffers `json:"buffers,omitempty"`
+}
+
+// ProvisioningStrategy defines how instance configurations are selected
+// +kubebuilder:validation:Enum:={exact-fit,best-fit,cost-optimized}
+type ProvisioningStrategy string
+
+const (
+	// StrategyExactFit provisions exactly what pods request plus overhead
+	StrategyExactFit ProvisioningStrategy = "exact-fit"
+	// StrategyBestFit rounds up to nearest efficient configuration
+	StrategyBestFit ProvisioningStrategy = "best-fit"
+	// StrategyCostOptimized balances between fit and pricing sweet spots
+	StrategyCostOptimized ProvisioningStrategy = "cost-optimized"
+)
+
+// CapacityTypeRatio defines the distribution of capacity types
+type CapacityTypeRatio struct {
+	// Preemptible specifies the percentage of nodes to provision as preemptible/spot instances
+	// +kubebuilder:validation:Minimum:=0
+	// +kubebuilder:validation:Maximum:=100
+	// +kubebuilder:default:=80
+	// +optional
+	Preemptible int32 `json:"preemptible"`
+	// OnDemand specifies the percentage of nodes to provision as on-demand instances
+	// +kubebuilder:validation:Minimum:=0
+	// +kubebuilder:validation:Maximum:=100
+	// +kubebuilder:default:=20
+	// +optional
+	OnDemand int32 `json:"onDemand"`
+}
+
+// DynamicConstraints define the boundaries for dynamic shape provisioning
+type DynamicConstraints struct {
+	// MinOCPUs is the minimum number of OCPUs per node
+	// +kubebuilder:validation:Minimum:=1
+	// +kubebuilder:default:=1
+	// +optional
+	MinOCPUs int32 `json:"minOCPUs"`
+	// MaxOCPUs is the maximum number of OCPUs per node
+	// +kubebuilder:validation:Maximum:=128
+	// +kubebuilder:default:=64
+	// +optional
+	MaxOCPUs int32 `json:"maxOCPUs"`
+	// MinMemoryGB is the minimum memory in GB per node
+	// +kubebuilder:validation:Minimum:=1
+	// +kubebuilder:default:=1
+	// +optional
+	MinMemoryGB int32 `json:"minMemoryGB"`
+	// MaxMemoryGB is the maximum memory in GB per node
+	// +kubebuilder:validation:Maximum:=2048
+	// +kubebuilder:default:=1024
+	// +optional
+	MaxMemoryGB int32 `json:"maxMemoryGB"`
+	// AllowedShapes specifies which flexible shape families are permitted
+	// +kubebuilder:validation:MinItems:=1
+	// +required
+	AllowedShapes []string `json:"allowedShapes"`
+}
+
+// SystemOverhead defines system-reserved resources
+type SystemOverhead struct {
+	// SystemReservedCPU is CPU reserved for system processes
+	// +kubebuilder:default:="100m"
+	// +optional
+	SystemReservedCPU string `json:"systemReservedCPU,omitempty"`
+	// SystemReservedMemory is memory reserved for system processes
+	// +kubebuilder:default:="500Mi"
+	// +optional
+	SystemReservedMemory string `json:"systemReservedMemory,omitempty"`
+	// KubeletReservedCPU is CPU reserved for kubelet
+	// +kubebuilder:default:="200m"
+	// +optional
+	KubeletReservedCPU string `json:"kubeletReservedCPU,omitempty"`
+	// KubeletReservedMemory is memory reserved for kubelet
+	// +kubebuilder:default:="1Gi"
+	// +optional
+	KubeletReservedMemory string `json:"kubeletReservedMemory,omitempty"`
+	// EvictionThresholdCPU is CPU threshold for eviction
+	// +kubebuilder:default:="100m"
+	// +optional
+	EvictionThresholdCPU string `json:"evictionThresholdCPU,omitempty"`
+	// EvictionThresholdMemory is memory threshold for eviction
+	// +kubebuilder:default:="500Mi"
+	// +optional
+	EvictionThresholdMemory string `json:"evictionThresholdMemory,omitempty"`
+}
+
+// ResourceBuffers define headroom for resource allocation
+type ResourceBuffers struct {
+	// CPUHeadroomPercent is the percentage of CPU to add as buffer
+	// +kubebuilder:validation:Minimum:=0
+	// +kubebuilder:validation:Maximum:=50
+	// +kubebuilder:default:=10
+	// +optional
+	CPUHeadroomPercent int32 `json:"cpuHeadroomPercent"`
+	// MemoryHeadroomPercent is the percentage of memory to add as buffer
+	// +kubebuilder:validation:Minimum:=0
+	// +kubebuilder:validation:Maximum:=50
+	// +kubebuilder:default:=5
+	// +optional
+	MemoryHeadroomPercent int32 `json:"memoryHeadroomPercent"`
 }
