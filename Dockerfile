@@ -12,8 +12,10 @@ COPY go.mod go.sum ./
 # Set Go proxy for better reliability
 ENV GOPROXY=https://proxy.golang.org,direct
 ENV GOSUMDB=sum.golang.org
+# Verify files are copied
+RUN ls -la go.* || echo "Go files not found"
 # Download dependencies with verbose output for debugging
-RUN go mod download -x || (cat go.mod && exit 1)
+RUN go mod download || (echo "=== go.mod content ===" && cat go.mod && echo "=== Error details ===" && go mod download -x && exit 1)
 
 # Copy source code
 COPY . .
