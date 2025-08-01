@@ -27,6 +27,7 @@ import (
 	"github.com/samber/lo"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	v1 "sigs.k8s.io/karpenter/pkg/apis/v1"
@@ -210,9 +211,15 @@ func (p *Provider) Name() string {
 
 // GetSupportedNodeClasses returns the supported node class types
 func (p *Provider) GetSupportedNodeClasses() []status.Object {
-	// This would return OCI-specific node class implementations
-	// For now, returning empty as we focus on the core provider
-	return []status.Object{}
+	// Return OCINodeClass as the supported node class for OCI provider
+	return []status.Object{
+		&OCINodeClass{
+			TypeMeta: metav1.TypeMeta{
+				APIVersion: "karpenter.sh/v1",
+				Kind:       "OCINodeClass",
+			},
+		},
+	}
 }
 
 // Helper methods
