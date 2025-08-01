@@ -19,22 +19,17 @@ COPY pkg/ pkg/
 
 # Build the controller binary
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
-    go build -ldflags="-s -w -X main.version=${VERSION:-dev}" \
-    -o karpenter ./cmd/controller/main.go
+    go build -ldflags="-s -w" \
+    -o karpenter ./cmd/controller/...
 
 # Runtime stage
 FROM gcr.io/distroless/static:nonroot
 
-# Labels
-LABEL org.opencontainers.image.source=https://github.com/startappdev/karpenter
-
-# Copy binary from builder
+# Copy the binary
 COPY --from=builder /workspace/karpenter /karpenter
 
-# Run as non-root
-USER 65532:65532
+# Expose port
+EXPOSE 8080
 
-# Expose ports
-EXPOSE 8080 8443 8001
-
+# Set the entrypoint
 ENTRYPOINT ["/karpenter"]
