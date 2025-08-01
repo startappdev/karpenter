@@ -26,6 +26,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 
+	"sigs.k8s.io/karpenter/pkg/apis"
 	v1 "sigs.k8s.io/karpenter/pkg/apis/v1"
 	"sigs.k8s.io/karpenter/pkg/cloudprovider"
 	"sigs.k8s.io/karpenter/pkg/scheduling"
@@ -72,7 +73,7 @@ func NewNodeClaimTemplate(nodePool *v1.NodePool) *NodeClaimTemplate {
 	nct.Requirements.Add(scheduling.NewNodeSelectorRequirementsWithMinValues(nct.Spec.Requirements...).Values()...)
 	// Filter out karpenter.sh domain labels from requirements as they are restricted by the API server
 	filteredLabels := lo.PickBy(nct.Labels, func(key string, value string) bool {
-		return !strings.HasPrefix(key, v1.Group+"/")
+		return !strings.HasPrefix(key, apis.Group+"/")
 	})
 	nct.Requirements.Add(scheduling.NewLabelRequirements(filteredLabels).Values()...)
 	return nct
