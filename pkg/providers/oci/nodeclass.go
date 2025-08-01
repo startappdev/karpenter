@@ -18,6 +18,7 @@ package oci
 
 import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
@@ -66,6 +67,59 @@ func (n *OCINodeClass) GetConditions() []metav1.Condition {
 // SetConditions sets the conditions
 func (n *OCINodeClass) SetConditions(conditions []metav1.Condition) {
 	n.Status.Conditions = conditions
+}
+
+// DeepCopyObject implements runtime.Object
+func (n *OCINodeClass) DeepCopyObject() runtime.Object {
+	if n == nil {
+		return nil
+	}
+	out := new(OCINodeClass)
+	n.DeepCopyInto(out)
+	return out
+}
+
+// DeepCopyInto copies the receiver into out
+func (n *OCINodeClass) DeepCopyInto(out *OCINodeClass) {
+	*out = *n
+	out.TypeMeta = n.TypeMeta
+	n.ObjectMeta.DeepCopyInto(&out.ObjectMeta)
+	n.Spec.DeepCopyInto(&out.Spec)
+	n.Status.DeepCopyInto(&out.Status)
+}
+
+// DeepCopy creates a deep copy
+func (n *OCINodeClass) DeepCopy() *OCINodeClass {
+	if n == nil {
+		return nil
+	}
+	out := new(OCINodeClass)
+	n.DeepCopyInto(out)
+	return out
+}
+
+// DeepCopyInto for OCINodeClassSpec
+func (s *OCINodeClassSpec) DeepCopyInto(out *OCINodeClassSpec) {
+	*out = *s
+	if s.SubnetIDs != nil {
+		out.SubnetIDs = make([]string, len(s.SubnetIDs))
+		copy(out.SubnetIDs, s.SubnetIDs)
+	}
+	if s.Tags != nil {
+		out.Tags = make(map[string]string, len(s.Tags))
+		for k, v := range s.Tags {
+			out.Tags[k] = v
+		}
+	}
+}
+
+// DeepCopyInto for OCINodeClassStatus
+func (s *OCINodeClassStatus) DeepCopyInto(out *OCINodeClassStatus) {
+	*out = *s
+	if s.Conditions != nil {
+		out.Conditions = make([]metav1.Condition, len(s.Conditions))
+		copy(out.Conditions, s.Conditions)
+	}
 }
 
 // OCINodeClassList contains a list of OCINodeClass
