@@ -675,15 +675,27 @@ func (c *Client) buildMetadata(nodeClaim *v1.NodeClaim) map[string]string {
 
 	// Extract cluster endpoint
 	var clusterEndpoint string
-	if cluster.Endpoints != nil && cluster.Endpoints.Kubernetes != nil {
-		clusterEndpoint = *cluster.Endpoints.Kubernetes
+	if cluster.Endpoints != nil {
+		if cluster.Endpoints.PublicEndpoint != nil {
+			clusterEndpoint = *cluster.Endpoints.PublicEndpoint
+		} else if cluster.Endpoints.PrivateEndpoint != nil {
+			clusterEndpoint = *cluster.Endpoints.PrivateEndpoint
+		} else if cluster.Endpoints.Kubernetes != nil {
+			clusterEndpoint = *cluster.Endpoints.Kubernetes
+		}
+	}
+	
+	// If no endpoint found, try to extract from kubeconfig later
+	if clusterEndpoint == "" {
+		logger.Info("no direct cluster endpoint found, will extract from kubeconfig")
 	}
 	
 	logger.Info("got cluster details",
 		"clusterName", lo.FromPtr(cluster.Name),
 		"clusterEndpoint", clusterEndpoint,
 		"kubernetesVersion", lo.FromPtr(cluster.KubernetesVersion),
-		"lifecycleState", cluster.LifecycleState)
+		"lifecycleState", cluster.LifecycleState,
+		"clusterType", lo.FromPtr(cluster.Type))
 
 	// Get CA certificate from cluster
 	var caCertData string
@@ -722,14 +734,21 @@ fi
 		return metadata
 	}
 	
-	// Extract CA certificate from kubeconfig
+	// Extract CA certificate and endpoint from kubeconfig
 	kubeconfigLines := strings.Split(kubeconfig, "\n")
 	for _, line := range kubeconfigLines {
 		if strings.Contains(line, "certificate-authority-data:") {
 			parts := strings.Split(line, ": ")
 			if len(parts) >= 2 {
 				caCertData = strings.TrimSpace(parts[1])
-				break
+			}
+		}
+		// Extract endpoint if we don't have one yet
+		if clusterEndpoint == "" && strings.Contains(line, "server:") {
+			parts := strings.Split(line, ": ")
+			if len(parts) >= 2 {
+				clusterEndpoint = strings.TrimSpace(parts[1])
+				logger.Info("extracted cluster endpoint from kubeconfig", "endpoint", clusterEndpoint)
 			}
 		}
 	}

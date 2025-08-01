@@ -207,6 +207,10 @@ func WrapOCIError(err error, resourceType string) error {
 	
 	switch {
 	case contains(errMsg, "NotFound") || contains(errMsg, "404"):
+		// Add more context for NotAuthorizedOrNotFound errors
+		if contains(errMsg, "NotAuthorizedOrNotFound") {
+			return fmt.Errorf("%s not found or not authorized: %w (Check IAM policies, resource OCIDs, and compartment access)", resourceType, err)
+		}
 		return &NotFoundError{
 			ResourceType: resourceType,
 			ResourceID:   extractResourceID(errMsg),
