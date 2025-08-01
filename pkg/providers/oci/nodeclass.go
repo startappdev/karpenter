@@ -17,6 +17,7 @@ limitations under the License.
 package oci
 
 import (
+	"github.com/awslabs/operatorpkg/status"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -51,7 +52,7 @@ type OCINodeClassSpec struct {
 // OCINodeClassStatus defines the observed state of OCINodeClass
 type OCINodeClassStatus struct {
 	// Conditions contains the observed conditions of the OCINodeClass
-	Conditions []metav1.Condition `json:"conditions,omitempty"`
+	Conditions []status.Condition `json:"conditions,omitempty"`
 }
 
 // GetObjectKind returns the TypeMeta
@@ -60,12 +61,12 @@ func (n *OCINodeClass) GetObjectKind() schema.ObjectKind {
 }
 
 // GetConditions returns the conditions
-func (n *OCINodeClass) GetConditions() []metav1.Condition {
+func (n *OCINodeClass) GetConditions() []status.Condition {
 	return n.Status.Conditions
 }
 
 // SetConditions sets the conditions
-func (n *OCINodeClass) SetConditions(conditions []metav1.Condition) {
+func (n *OCINodeClass) SetConditions(conditions []status.Condition) {
 	n.Status.Conditions = conditions
 }
 
@@ -117,7 +118,7 @@ func (s *OCINodeClassSpec) DeepCopyInto(out *OCINodeClassSpec) {
 func (s *OCINodeClassStatus) DeepCopyInto(out *OCINodeClassStatus) {
 	*out = *s
 	if s.Conditions != nil {
-		out.Conditions = make([]metav1.Condition, len(s.Conditions))
+		out.Conditions = make([]status.Condition, len(s.Conditions))
 		copy(out.Conditions, s.Conditions)
 	}
 }
