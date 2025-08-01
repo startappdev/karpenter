@@ -170,7 +170,7 @@ controller:
 # Webhook configuration
 webhook:
   # -- Enable webhook
-  enabled: true
+  enabled: false
   # -- Webhook port
   port: 8443
   # -- Webhook metrics port
