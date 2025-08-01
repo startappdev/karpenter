@@ -22,6 +22,10 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/oracle/oci-go-sdk/v65/common"
+	"github.com/oracle/oci-go-sdk/v65/common/auth"
+	"github.com/oracle/oci-go-sdk/v65/core"
+	"github.com/oracle/oci-go-sdk/v65/identity"
 	"github.com/samber/lo"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"sigs.k8s.io/controller-runtime/pkg/log"
@@ -31,9 +35,9 @@ import (
 
 // Client wraps OCI API operations
 type Client struct {
-	config *Config
-	// In a real implementation, this would contain the actual OCI SDK clients
-	// For now, we'll implement a simplified version
+	config         *Config
+	computeClient  core.ComputeClient
+	configProvider common.ConfigurationProvider
 }
 
 // NewClient creates a new OCI client
@@ -53,8 +57,46 @@ func NewClient(config *Config) (*Client, error) {
 		return nil, fmt.Errorf("at least one subnet ID is required")
 	}
 
+	// Create configuration provider based on auth type
+	var configProvider common.ConfigurationProvider
+	var err error
+
+	switch config.AuthType {
+	case "instance_principal":
+		// Use instance principal authentication
+		configProvider, err = auth.InstancePrincipalConfigurationProvider()
+		if err != nil {
+			return nil, fmt.Errorf("creating instance principal configuration provider: %w", err)
+		}
+	case "user_principal":
+		// Use user principal authentication with provided credentials
+		configProvider = common.NewRawConfigurationProvider(
+			config.TenancyOCID,
+			config.UserOCID,
+			config.Region,
+			config.Fingerprint,
+			config.PrivateKey,
+			&config.Passphrase,
+		)
+	default:
+		return nil, fmt.Errorf("unsupported auth type: %s", config.AuthType)
+	}
+
+	// Create compute client
+	computeClient, err := core.NewComputeClientWithConfigurationProvider(configProvider)
+	if err != nil {
+		return nil, fmt.Errorf("creating compute client: %w", err)
+	}
+
+	// Override region if specified in config
+	if config.Region != "" {
+		computeClient.SetRegion(config.Region)
+	}
+
 	return &Client{
-		config: config,
+		config:         config,
+		computeClient:  computeClient,
+		configProvider: configProvider,
 	}, nil
 }
 
@@ -63,41 +105,72 @@ func (c *Client) LaunchInstance(ctx context.Context, nodeClaim *v1.NodeClaim, sh
 	logger := log.FromContext(ctx)
 	logger.Info("launching OCI instance", "shape", shape)
 
-	details := &LaunchInstanceDetails{
-		AvailabilityDomain: c.selectAvailabilityDomain(),
-		CompartmentID:      c.config.CompartmentID,
-		Shape:              shape,
-		ImageID:            c.config.ImageID,
-		SubnetID:           c.selectSubnet(),
-		Metadata:           c.buildMetadata(nodeClaim),
-		FreeformTags:       c.buildFreeformTags(nodeClaim),
-		DefinedTags:        c.buildDefinedTags(nodeClaim),
+	// Get availability domains for the compartment
+	ad, err := c.getAvailabilityDomain(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("getting availability domain: %w", err)
 	}
 
-	var instance *Instance
-	err := WithRetry(ctx, DefaultRetryConfig(), "launch-instance", func() error {
-		// Simulate instance launch with potential failures
-		if shouldSimulateError() {
-			return ErrShapeNotAvailable
+	var ociInstance core.Instance
+	err = WithRetry(ctx, DefaultRetryConfig(), "launch-instance", func() error {
+		// Create launch instance request
+		request := core.LaunchInstanceRequest{
+			LaunchInstanceDetails: core.LaunchInstanceDetails{
+				AvailabilityDomain: &ad,
+				CompartmentId:      &c.config.CompartmentID,
+				Shape:              &shape,
+				DisplayName:        common.String(fmt.Sprintf("karpenter-%s", nodeClaim.Name)),
+				
+				// Source details - using platform image
+				SourceDetails: &core.InstanceSourceViaImageDetails{
+					ImageId: &c.config.ImageID,
+				},
+				
+				// Network configuration
+				CreateVnicDetails: &core.CreateVnicDetails{
+					SubnetId:       common.String(c.selectSubnet()),
+					AssignPublicIp: common.Bool(false),
+					DisplayName:    common.String(fmt.Sprintf("karpenter-%s", nodeClaim.Name)),
+				},
+				
+				// Metadata including cloud-init user_data
+				Metadata:     c.buildMetadata(nodeClaim),
+				FreeformTags: c.buildFreeformTags(nodeClaim),
+				DefinedTags:  c.buildDefinedTags(nodeClaim),
+			},
 		}
-		
-		instance = &Instance{
-			ID:                 fmt.Sprintf("ocid1.instance.oc1.%s.%s", c.config.Region, generateID()),
-			Shape:              shape,
-			ImageID:            details.ImageID,
-			CompartmentID:      details.CompartmentID,
-			AvailabilityDomain: details.AvailabilityDomain,
-			State:              "RUNNING",
-			TimeCreated:        time.Now(),
-			Metadata:           details.Metadata,
-			FreeformTags:       details.FreeformTags,
-			DefinedTags:        details.DefinedTags,
+
+		// Launch the instance
+		response, err := c.computeClient.LaunchInstance(ctx, request)
+		if err != nil {
+			return WrapOCIError(err, "instance")
 		}
+
+		ociInstance = response.Instance
 		return nil
 	})
 	
 	if err != nil {
 		return nil, HandleError(ctx, err, "launch-instance")
+	}
+
+	// Convert OCI instance to our Instance type
+	instance := &Instance{
+		ID:                 *ociInstance.Id,
+		Shape:              *ociInstance.Shape,
+		ImageID:            c.config.ImageID,
+		CompartmentID:      *ociInstance.CompartmentId,
+		AvailabilityDomain: *ociInstance.AvailabilityDomain,
+		State:              string(ociInstance.LifecycleState),
+		TimeCreated:        ociInstance.TimeCreated.Time,
+		Metadata:           ociInstance.Metadata,
+		FreeformTags:       ociInstance.FreeformTags,
+		DefinedTags:        ociInstance.DefinedTags,
+	}
+
+	// Wait for instance to be running
+	if err := c.WaitForInstanceReady(ctx, instance.ID); err != nil {
+		return nil, fmt.Errorf("waiting for instance ready: %w", err)
 	}
 
 	return instance, nil
@@ -115,53 +188,92 @@ func (c *Client) LaunchFlexibleInstance(ctx context.Context, nodeClaim *v1.NodeC
 		"ocpus", lo.FromPtr(shapeConfig.OCPUs),
 		"memory", lo.FromPtr(shapeConfig.MemoryInGBs))
 
+	// Get availability domains for the compartment
+	ad, err := c.getAvailabilityDomain(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("getting availability domain: %w", err)
+	}
+
 	// Determine capacity type from nodeClaim labels or annotations
 	isPreemptible := c.shouldUsePreemptible(nodeClaim)
 	
-	details := &LaunchInstanceDetails{
-		AvailabilityDomain: c.selectAvailabilityDomain(),
-		CompartmentID:      c.config.CompartmentID,
-		Shape:              shape,
-		ShapeConfig:        shapeConfig,
-		ImageID:            c.config.ImageID,
-		SubnetID:           c.selectSubnet(),
-		Metadata:           c.buildMetadata(nodeClaim),
-		FreeformTags:       c.buildFreeformTags(nodeClaim),
-		DefinedTags:        c.buildDefinedTags(nodeClaim),
-	}
+	var ociInstance core.Instance
+	err = WithRetry(ctx, DefaultRetryConfig(), "launch-flexible-instance", func() error {
+		// Create launch instance request
+		request := core.LaunchInstanceRequest{
+			LaunchInstanceDetails: core.LaunchInstanceDetails{
+				AvailabilityDomain: &ad,
+				CompartmentId:      &c.config.CompartmentID,
+				Shape:              &shape,
+				DisplayName:        common.String(fmt.Sprintf("karpenter-%s", nodeClaim.Name)),
+				
+				// Shape configuration for flexible shapes
+				ShapeConfig: &core.LaunchInstanceShapeConfigDetails{
+					Ocpus:       common.Float32(float32(*shapeConfig.OCPUs)),
+					MemoryInGBs: common.Float32(float32(*shapeConfig.MemoryInGBs)),
+				},
+				
+				// Source details - using platform image
+				SourceDetails: &core.InstanceSourceViaImageDetails{
+					ImageId: &c.config.ImageID,
+				},
+				
+				// Network configuration
+				CreateVnicDetails: &core.CreateVnicDetails{
+					SubnetId:       common.String(c.selectSubnet()),
+					AssignPublicIp: common.Bool(false),
+					DisplayName:    common.String(fmt.Sprintf("karpenter-%s", nodeClaim.Name)),
+				},
+				
+				// Metadata including cloud-init user_data
+				Metadata:     c.buildMetadata(nodeClaim),
+				FreeformTags: c.buildFreeformTags(nodeClaim),
+				DefinedTags:  c.buildDefinedTags(nodeClaim),
+			},
+		}
 
-	if isPreemptible {
-		details.PreemptibleInstanceConfig = &PreemptibleInstanceConfig{
-			PreemptionAction: "TERMINATE",
+		// Add preemptible configuration if needed
+		if isPreemptible {
+			request.LaunchInstanceDetails.PreemptibleInstanceConfig = &core.PreemptibleInstanceConfigDetails{
+				PreemptionAction: core.TerminatePreemptionAction{
+					PreserveBootVolume: common.Bool(false),
+				},
+			}
 		}
-	}
 
-	var instance *Instance
-	err := WithRetry(ctx, DefaultRetryConfig(), "launch-flexible-instance", func() error {
-		// Simulate instance launch with potential failures
-		if shouldSimulateError() {
-			return ErrShapeNotAvailable
+		// Launch the instance
+		response, err := c.computeClient.LaunchInstance(ctx, request)
+		if err != nil {
+			return WrapOCIError(err, "instance")
 		}
-		
-		instance = &Instance{
-			ID:                 fmt.Sprintf("ocid1.instance.oc1.%s.%s", c.config.Region, generateID()),
-			Shape:              shape,
-			ShapeConfig:        shapeConfig,
-			ImageID:            details.ImageID,
-			CompartmentID:      details.CompartmentID,
-			AvailabilityDomain: details.AvailabilityDomain,
-			State:              "RUNNING",
-			TimeCreated:        time.Now(),
-			IsPreemptible:      isPreemptible,
-			Metadata:           details.Metadata,
-			FreeformTags:       details.FreeformTags,
-			DefinedTags:        details.DefinedTags,
-		}
+
+		ociInstance = response.Instance
 		return nil
 	})
 	
 	if err != nil {
 		return nil, HandleError(ctx, err, "launch-flexible-instance")
+	}
+
+	// Convert OCI instance to our Instance type
+	instance := &Instance{
+		ID:                 *ociInstance.Id,
+		Shape:              *ociInstance.Shape,
+		ShapeConfig:        shapeConfig,
+		ImageID:            c.config.ImageID,
+		CompartmentID:      *ociInstance.CompartmentId,
+		AvailabilityDomain: *ociInstance.AvailabilityDomain,
+		State:              string(ociInstance.LifecycleState),
+		TimeCreated:        ociInstance.TimeCreated.Time,
+		IsPreemptible:      isPreemptible,
+		Metadata:           ociInstance.Metadata,
+		FreeformTags:       ociInstance.FreeformTags,
+		DefinedTags:        ociInstance.DefinedTags,
+	}
+
+	// Wait for instance to be running
+	if err := c.WaitForInstanceReady(ctx, instance.ID); err != nil {
+		return nil, fmt.Errorf("waiting for instance ready: %w", err)
 	}
 
 	return instance, nil
@@ -172,9 +284,19 @@ func (c *Client) TerminateInstance(ctx context.Context, instanceID string) error
 	logger := log.FromContext(ctx)
 	logger.Info("terminating OCI instance", "instanceID", instanceID)
 
-	// In real implementation, this would call OCI API
-	// For now, we'll simulate success
-	return nil
+	return WithRetry(ctx, DefaultRetryConfig(), "terminate-instance", func() error {
+		request := core.TerminateInstanceRequest{
+			InstanceId:         &instanceID,
+			PreserveBootVolume: common.Bool(false),
+		}
+
+		_, err := c.computeClient.TerminateInstance(ctx, request)
+		if err != nil {
+			return WrapOCIError(err, "instance")
+		}
+
+		return nil
+	})
 }
 
 // GetInstance retrieves instance details
@@ -182,12 +304,40 @@ func (c *Client) GetInstance(ctx context.Context, instanceID string) (*Instance,
 	logger := log.FromContext(ctx)
 	logger.V(1).Info("getting OCI instance", "instanceID", instanceID)
 
-	// In real implementation, this would call OCI API
-	// For now, return not found
-	return nil, &NotFoundError{
-		ResourceType: "Instance",
-		ResourceID:   instanceID,
+	request := core.GetInstanceRequest{
+		InstanceId: &instanceID,
 	}
+
+	response, err := c.computeClient.GetInstance(ctx, request)
+	if err != nil {
+		return nil, WrapOCIError(err, "instance")
+	}
+
+	ociInstance := response.Instance
+
+	// Convert OCI instance to our Instance type
+	instance := &Instance{
+		ID:                 *ociInstance.Id,
+		Shape:              *ociInstance.Shape,
+		ImageID:            getImageIDFromSourceDetails(ociInstance.SourceDetails),
+		CompartmentID:      *ociInstance.CompartmentId,
+		AvailabilityDomain: *ociInstance.AvailabilityDomain,
+		State:              string(ociInstance.LifecycleState),
+		TimeCreated:        ociInstance.TimeCreated.Time,
+		Metadata:           ociInstance.Metadata,
+		FreeformTags:       ociInstance.FreeformTags,
+		DefinedTags:        ociInstance.DefinedTags,
+	}
+
+	// Set shape config if available
+	if ociInstance.ShapeConfig != nil {
+		instance.ShapeConfig = &ShapeConfig{
+			OCPUs:       lo.ToPtr(int32(*ociInstance.ShapeConfig.Ocpus)),
+			MemoryInGBs: lo.ToPtr(int32(*ociInstance.ShapeConfig.MemoryInGBs)),
+		}
+	}
+
+	return instance, nil
 }
 
 // ListInstances lists all instances in the compartment
@@ -195,38 +345,127 @@ func (c *Client) ListInstances(ctx context.Context) ([]*Instance, error) {
 	logger := log.FromContext(ctx)
 	logger.V(1).Info("listing OCI instances", "compartmentID", c.config.CompartmentID)
 
-	// In real implementation, this would call OCI API
-	// For now, return empty list
-	return []*Instance{}, nil
+	var instances []*Instance
+
+	request := core.ListInstancesRequest{
+		CompartmentId: &c.config.CompartmentID,
+		Limit:         common.Int(1000),
+	}
+
+	for {
+		response, err := c.computeClient.ListInstances(ctx, request)
+		if err != nil {
+			return nil, WrapOCIError(err, "instances")
+		}
+
+		for _, ociInstance := range response.Items {
+			instance := &Instance{
+				ID:                 *ociInstance.Id,
+				Shape:              *ociInstance.Shape,
+				CompartmentID:      *ociInstance.CompartmentId,
+				AvailabilityDomain: *ociInstance.AvailabilityDomain,
+				State:              string(ociInstance.LifecycleState),
+				TimeCreated:        ociInstance.TimeCreated.Time,
+				Metadata:           ociInstance.Metadata,
+				FreeformTags:       ociInstance.FreeformTags,
+				DefinedTags:        ociInstance.DefinedTags,
+			}
+
+			// Set shape config if available
+			if ociInstance.ShapeConfig != nil {
+				instance.ShapeConfig = &ShapeConfig{
+					OCPUs:       lo.ToPtr(int32(*ociInstance.ShapeConfig.Ocpus)),
+					MemoryInGBs: lo.ToPtr(int32(*ociInstance.ShapeConfig.MemoryInGBs)),
+				}
+			}
+
+			instances = append(instances, instance)
+		}
+
+		if response.OpcNextPage == nil {
+			break
+		}
+
+		request.Page = response.OpcNextPage
+	}
+
+	return instances, nil
 }
 
 // ListShapes lists available shapes
 func (c *Client) ListShapes(ctx context.Context) ([]*Shape, error) {
-	// In real implementation, this would call OCI API
-	// For now, return some example shapes
-	return []*Shape{
-		{
-			Name:               "VM.Standard.E4.Flex",
-			IsFlexible:         true,
-			OCPUOptions:        &OCPUOptions{Min: 1, Max: 64},
-			MemoryOptions:      &MemoryOptions{MinInGBs: 1, MaxInGBs: 1024, DefaultPerOCPUInGBs: 16},
-			NetworkingBandwidthInGbps: 1,
-		},
-		{
-			Name:               "VM.Standard.E5.Flex",
-			IsFlexible:         true,
-			OCPUOptions:        &OCPUOptions{Min: 1, Max: 94},
-			MemoryOptions:      &MemoryOptions{MinInGBs: 1, MaxInGBs: 1024, DefaultPerOCPUInGBs: 16},
-			NetworkingBandwidthInGbps: 2,
-		},
-		{
-			Name:               "VM.Standard2.1",
-			OCPUs:              1,
-			MemoryInGBs:        15,
-			IsFlexible:         false,
-			NetworkingBandwidthInGbps: 1,
-		},
-	}, nil
+	logger := log.FromContext(ctx)
+	logger.V(1).Info("listing available shapes", "compartmentID", c.config.CompartmentID)
+
+	// Get first availability domain
+	ad, err := c.getAvailabilityDomain(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("getting availability domain: %w", err)
+	}
+
+	var shapes []*Shape
+
+	request := core.ListShapesRequest{
+		CompartmentId:      &c.config.CompartmentID,
+		AvailabilityDomain: &ad,
+		Limit:              common.Int(1000),
+	}
+
+	for {
+		response, err := c.computeClient.ListShapes(ctx, request)
+		if err != nil {
+			return nil, WrapOCIError(err, "shapes")
+		}
+
+		for _, ociShape := range response.Items {
+			shape := &Shape{
+				Name:        *ociShape.Shape,
+				IsFlexible:  isFlexibleShape(*ociShape.Shape),
+			}
+
+			// Set fixed shape properties
+			if ociShape.Ocpus != nil {
+				shape.OCPUs = *ociShape.Ocpus
+			}
+			if ociShape.MemoryInGBs != nil {
+				shape.MemoryInGBs = *ociShape.MemoryInGBs
+			}
+			if ociShape.NetworkingBandwidthInGbps != nil {
+				shape.NetworkingBandwidthInGbps = *ociShape.NetworkingBandwidthInGbps
+			}
+
+			// Set flexible shape options
+			if ociShape.OcpuOptions != nil {
+				shape.OCPUOptions = &OCPUOptions{
+					Min: *ociShape.OcpuOptions.Min,
+					Max: *ociShape.OcpuOptions.Max,
+				}
+			}
+			if ociShape.MemoryOptions != nil {
+				shape.MemoryOptions = &MemoryOptions{
+					MinInGBs:            *ociShape.MemoryOptions.MinInGBs,
+					MaxInGBs:            *ociShape.MemoryOptions.MaxInGBs,
+					DefaultPerOCPUInGBs: *ociShape.MemoryOptions.DefaultPerOcpuInGBs,
+				}
+				if ociShape.MemoryOptions.MinPerOcpuInGBs != nil {
+					shape.MemoryOptions.MinPerOCPUInGBs = *ociShape.MemoryOptions.MinPerOcpuInGBs
+				}
+				if ociShape.MemoryOptions.MaxPerOcpuInGBs != nil {
+					shape.MemoryOptions.MaxPerOCPUInGBs = *ociShape.MemoryOptions.MaxPerOcpuInGBs
+				}
+			}
+
+			shapes = append(shapes, shape)
+		}
+
+		if response.OpcNextPage == nil {
+			break
+		}
+
+		request.Page = response.OpcNextPage
+	}
+
+	return shapes, nil
 }
 
 // WaitForInstanceReady waits for an instance to be ready
@@ -239,19 +478,71 @@ func (c *Client) WaitForInstanceReady(ctx context.Context, instanceID string) er
 		Duration: 5 * time.Second,
 		Factor:   1.5,
 		Jitter:   0.1,
-		Steps:    20,
+		Steps:    40, // Increased from 20 to allow more time for instance startup
 		Cap:      2 * time.Minute,
 	}, func() (bool, error) {
-		// In real implementation, check instance state
-		// For now, simulate immediate readiness
-		return true, nil
+		request := core.GetInstanceRequest{
+			InstanceId: &instanceID,
+		}
+
+		response, err := c.computeClient.GetInstance(ctx, request)
+		if err != nil {
+			// Don't retry on not found errors
+			if IsNotFoundError(WrapOCIError(err, "instance")) {
+				return false, err
+			}
+			// Retry on other errors
+			logger.V(1).Info("error getting instance state, will retry", "error", err)
+			return false, nil
+		}
+
+		state := response.Instance.LifecycleState
+		logger.V(1).Info("instance state", "state", state)
+
+		switch state {
+		case core.InstanceLifecycleStateRunning:
+			return true, nil
+		case core.InstanceLifecycleStateTerminated, core.InstanceLifecycleStateTerminating:
+			return false, fmt.Errorf("instance entered terminated state")
+		default:
+			// Continue waiting for other states
+			return false, nil
+		}
 	})
 }
 
 // Helper methods
 
+// getAvailabilityDomain gets the first available availability domain
+func (c *Client) getAvailabilityDomain(ctx context.Context) (string, error) {
+	request := identity.ListAvailabilityDomainsRequest{
+		CompartmentId: &c.config.CompartmentID,
+	}
+
+	// We need to create an identity client for this
+	identityClient, err := identity.NewIdentityClientWithConfigurationProvider(c.configProvider)
+	if err != nil {
+		return "", fmt.Errorf("creating identity client: %w", err)
+	}
+	// Note: IdentityClient doesn't have a Close method in the OCI SDK
+
+	response, err := identityClient.ListAvailabilityDomains(ctx, request)
+	if err != nil {
+		return "", WrapOCIError(err, "availability domains")
+	}
+
+	if len(response.Items) == 0 {
+		return "", fmt.Errorf("no availability domains found")
+	}
+
+	// For now, return the first AD. In production, this should be more sophisticated
+	// based on capacity, spread, and fault domain distribution
+	return *response.Items[0].Name, nil
+}
+
 func (c *Client) selectAvailabilityDomain() string {
-	// In real implementation, this would select based on capacity and spread
+	// This is a fallback for backward compatibility
+	// Real implementation should use getAvailabilityDomain
 	return fmt.Sprintf("AD-%d", 1)
 }
 
@@ -293,14 +584,46 @@ func (c *Client) buildMetadata(nodeClaim *v1.NodeClaim) map[string]string {
 	
 	// Add user data for node initialization
 	// OKE requires cloud-init to bootstrap nodes and join them to the cluster
-	cloudInitScript := `#cloud-config
-runcmd:
-  - curl --fail -H "Authorization: Bearer Oracle" -L0 http://169.254.169.254/opc/v2/instance/metadata/oke_init_script | base64 --decode >/var/run/oke-init.sh
-  - bash /var/run/oke-init.sh
+	// The oke_init_script is a special metadata key that OKE uses to bootstrap nodes
+	cloudInitScript := `#!/bin/bash
+# OKE Node Bootstrap Script
+# This script is executed by cloud-init to join the node to the OKE cluster
+
+# Wait for OKE metadata to be available
+attempts=0
+while [ $attempts -lt 60 ]; do
+    if curl -f -H "Authorization: Bearer Oracle" http://169.254.169.254/opc/v2/instance/metadata/oke_init_script > /dev/null 2>&1; then
+        break
+    fi
+    echo "Waiting for OKE metadata service..."
+    sleep 5
+    attempts=$((attempts + 1))
+done
+
+# Download and execute the OKE initialization script
+curl --fail -H "Authorization: Bearer Oracle" -L0 http://169.254.169.254/opc/v2/instance/metadata/oke_init_script | base64 --decode >/var/run/oke-init.sh
+
+# Make the script executable and run it
+chmod +x /var/run/oke-init.sh
+bash /var/run/oke-init.sh
+
+# Log the result
+if [ $? -eq 0 ]; then
+    echo "OKE node initialization completed successfully"
+else
+    echo "OKE node initialization failed"
+    exit 1
+fi
 `
 	
-	// In OCI, user_data is passed as a metadata field
+	// In OCI, user_data must be base64-encoded
 	metadata["user_data"] = base64.StdEncoding.EncodeToString([]byte(cloudInitScript))
+	
+	// Add any additional metadata that might be needed for OKE
+	// For example, if there's an SSH key specified
+	if sshKey, ok := nodeClaim.Annotations["karpenter.sh/ssh-key"]; ok {
+		metadata["ssh_authorized_keys"] = sshKey
+	}
 	
 	return metadata
 }
@@ -339,14 +662,26 @@ func isValidTagKey(key string) bool {
 	return len(key) > 0 && len(key) <= 100
 }
 
-func generateID() string {
-	// In real implementation, this would be handled by OCI
-	// For testing, generate a simple ID
-	return fmt.Sprintf("%d", time.Now().UnixNano())
-}
-
-func shouldSimulateError() bool {
-	// For testing purposes, randomly simulate errors
-	// In production, this would always return false
-	return false
+// getImageIDFromSourceDetails extracts the image ID from instance source details
+func getImageIDFromSourceDetails(sourceDetails core.InstanceSourceDetails) string {
+	// OCI uses polymorphic types for source details
+	// We need to type assert to get the image ID
+	if sourceDetails == nil {
+		return ""
+	}
+	
+	// The source details could be of different types, but for instances
+	// launched from images, it will be InstanceSourceViaImageDetails
+	switch sd := sourceDetails.(type) {
+	case *core.InstanceSourceViaImageDetails:
+		if sd.ImageId != nil {
+			return *sd.ImageId
+		}
+	case core.InstanceSourceViaImageDetails:
+		if sd.ImageId != nil {
+			return *sd.ImageId
+		}
+	}
+	
+	return ""
 }

@@ -21,7 +21,7 @@ import (
 	"fmt"
 	"math"
 
-	"github.com/samber/lo"
+	// Removed unused import
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	"sigs.k8s.io/controller-runtime/pkg/log"
@@ -99,8 +99,13 @@ func (c *Calculator) CalculateShapeForPods(ctx context.Context, pods []*corev1.P
 	overheadCPU, overheadMemory := c.calculateOverhead(totalCPU, totalMemory)
 	
 	// Calculate with buffers
-	cpuWithBuffer, bufferCPU := c.applyBuffer(totalCPU.DeepCopy().Add(overheadCPU), c.buffers.CPUHeadroomPercent)
-	memoryWithBuffer, bufferMemory := c.applyBuffer(totalMemory.DeepCopy().Add(overheadMemory), c.buffers.MemoryHeadroomPercent)
+	totalWithOverheadCPU := totalCPU.DeepCopy()
+	totalWithOverheadCPU.Add(overheadCPU)
+	cpuWithBuffer, bufferCPU := c.applyBuffer(totalWithOverheadCPU, c.buffers.CPUHeadroomPercent)
+	
+	totalWithOverheadMemory := totalMemory.DeepCopy()
+	totalWithOverheadMemory.Add(overheadMemory)
+	memoryWithBuffer, bufferMemory := c.applyBuffer(totalWithOverheadMemory, c.buffers.MemoryHeadroomPercent)
 	
 	// Convert to OCPUs and GB
 	ocpus := c.calculateOCPUs(cpuWithBuffer)

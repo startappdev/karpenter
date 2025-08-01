@@ -18,17 +18,13 @@ package binpacking
 
 import (
 	"context"
-	"fmt"
 	"sort"
 
-	"github.com/samber/lo"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	v1 "sigs.k8s.io/karpenter/pkg/apis/v1"
-	"sigs.k8s.io/karpenter/pkg/cloudprovider"
-	"sigs.k8s.io/karpenter/pkg/utils/resources"
 )
 
 // FlexiblePacker implements bin packing for dynamically sized nodes
@@ -101,7 +97,7 @@ func (p *FlexiblePacker) Pack(ctx context.Context, pods []*corev1.Pod, strategy 
 	sortedPods := p.sortPodsByResources(pods)
 
 	// Initialize result
-	result := &PackResult{
+	_ = &PackResult{
 		Nodes:             make([]*NodeConfiguration, 0),
 		UnschedulablePods: make([]*corev1.Pod, 0),
 	}
