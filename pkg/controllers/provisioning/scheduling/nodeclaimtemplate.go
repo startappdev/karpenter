@@ -18,6 +18,7 @@ package scheduling
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/awslabs/operatorpkg/object"
 	"github.com/samber/lo"
@@ -69,7 +70,11 @@ func NewNodeClaimTemplate(nodePool *v1.NodePool) *NodeClaimTemplate {
 		v1.NodeClassLabelKey(nodePool.Spec.Template.Spec.NodeClassRef.GroupKind()): nodePool.Spec.Template.Spec.NodeClassRef.Name,
 	})
 	nct.Requirements.Add(scheduling.NewNodeSelectorRequirementsWithMinValues(nct.Spec.Requirements...).Values()...)
-	nct.Requirements.Add(scheduling.NewLabelRequirements(nct.Labels).Values()...)
+	// Filter out karpenter.sh domain labels from requirements as they are restricted by the API server
+	filteredLabels := lo.PickBy(nct.Labels, func(key string, value string) bool {
+		return !strings.HasPrefix(key, v1.Group+"/")
+	})
+	nct.Requirements.Add(scheduling.NewLabelRequirements(filteredLabels).Values()...)
 	return nct
 }
 
