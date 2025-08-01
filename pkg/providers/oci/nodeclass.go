@@ -70,6 +70,11 @@ func (n *OCINodeClass) SetConditions(conditions []status.Condition) {
 	n.Status.Conditions = conditions
 }
 
+// StatusConditions returns the status conditions
+func (n *OCINodeClass) StatusConditions() status.ConditionSet {
+	return status.NewReadyConditions().For(n)
+}
+
 // DeepCopyObject implements runtime.Object
 func (n *OCINodeClass) DeepCopyObject() runtime.Object {
 	if n == nil {
