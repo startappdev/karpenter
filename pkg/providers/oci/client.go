@@ -18,6 +18,7 @@ package oci
 
 import (
 	"context"
+	"encoding/base64"
 	"fmt"
 	"time"
 
@@ -291,7 +292,15 @@ func (c *Client) buildMetadata(nodeClaim *v1.NodeClaim) map[string]string {
 	metadata["karpenter.sh/nodepool"] = nodeClaim.Labels[v1.NodePoolLabelKey]
 	
 	// Add user data for node initialization
-	// In real implementation, this would include cloud-init scripts
+	// OKE requires cloud-init to bootstrap nodes and join them to the cluster
+	cloudInitScript := `#cloud-config
+runcmd:
+  - curl --fail -H "Authorization: Bearer Oracle" -L0 http://169.254.169.254/opc/v2/instance/metadata/oke_init_script | base64 --decode >/var/run/oke-init.sh
+  - bash /var/run/oke-init.sh
+`
+	
+	// In OCI, user_data is passed as a metadata field
+	metadata["user_data"] = base64.StdEncoding.EncodeToString([]byte(cloudInitScript))
 	
 	return metadata
 }
