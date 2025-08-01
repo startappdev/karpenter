@@ -136,3 +136,36 @@ type OCINodeClassList struct {
 	Items           []OCINodeClass `json:"items"`
 }
 
+// DeepCopyObject implements runtime.Object
+func (l *OCINodeClassList) DeepCopyObject() runtime.Object {
+	if l == nil {
+		return nil
+	}
+	out := new(OCINodeClassList)
+	l.DeepCopyInto(out)
+	return out
+}
+
+// DeepCopyInto copies the receiver into out
+func (l *OCINodeClassList) DeepCopyInto(out *OCINodeClassList) {
+	*out = *l
+	out.TypeMeta = l.TypeMeta
+	l.ListMeta.DeepCopyInto(&out.ListMeta)
+	if l.Items != nil {
+		out.Items = make([]OCINodeClass, len(l.Items))
+		for i := range l.Items {
+			l.Items[i].DeepCopyInto(&out.Items[i])
+		}
+	}
+}
+
+// DeepCopy creates a deep copy
+func (l *OCINodeClassList) DeepCopy() *OCINodeClassList {
+	if l == nil {
+		return nil
+	}
+	out := new(OCINodeClassList)
+	l.DeepCopyInto(out)
+	return out
+}
+
