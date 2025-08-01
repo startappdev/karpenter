@@ -54,12 +54,13 @@ func (p *InstanceTypeProvider) GetStaticInstanceTypes(ctx context.Context, nodeP
 	
 	for _, shape := range shapes {
 		if shape.IsFlexible {
-			// Skip flexible shapes for static instance types
-			continue
+			// For flexible shapes, generate a few standard configurations
+			instanceTypes = append(instanceTypes, p.generateFlexibleInstanceTypes(shape)...)
+		} else {
+			// For fixed shapes, create a single instance type
+			instanceType := p.shapeToInstanceType(shape)
+			instanceTypes = append(instanceTypes, instanceType)
 		}
-		
-		instanceType := p.shapeToInstanceType(shape)
-		instanceTypes = append(instanceTypes, instanceType)
 	}
 	
 	return instanceTypes, nil
@@ -544,4 +545,74 @@ func (p *InstanceTypeProvider) getReservedResources(overhead *v1.SystemOverhead,
 	}
 	
 	return result
+}
+
+// generateFlexibleInstanceTypes generates common configurations for flexible shapes
+func (p *InstanceTypeProvider) generateFlexibleInstanceTypes(shape *Shape) []*cloudprovider.InstanceType {
+	var instanceTypes []*cloudprovider.InstanceType
+	
+	// Common flexible shape configurations
+	configs := []struct {
+		ocpus    int32
+		memoryGB int32
+	}{
+		{1, 16},   // 1 OCPU, 16GB RAM
+		{2, 32},   // 2 OCPUs, 32GB RAM
+		{4, 64},   // 4 OCPUs, 64GB RAM
+		{8, 128},  // 8 OCPUs, 128GB RAM
+		{16, 256}, // 16 OCPUs, 256GB RAM
+	}
+	
+	for _, config := range configs {
+		// Skip configurations that exceed shape limits
+		if shape.OCPUOptions != nil && (float32(config.ocpus) > shape.OCPUOptions.Max || float32(config.ocpus) < shape.OCPUOptions.Min) {
+			continue
+		}
+		if shape.MemoryOptions != nil && (float32(config.memoryGB) > shape.MemoryOptions.MaxInGBs || float32(config.memoryGB) < shape.MemoryOptions.MinInGBs) {
+			continue
+		}
+		
+		// Create instance type name with configuration details
+		instanceName := fmt.Sprintf("%s-%d-%d", shape.Name, config.ocpus, config.memoryGB)
+		
+		requirements := scheduling.NewRequirements(
+			scheduling.NewRequirement(corev1.LabelInstanceTypeStable, corev1.NodeSelectorOpIn, instanceName),
+			scheduling.NewRequirement(corev1.LabelArchStable, corev1.NodeSelectorOpIn, "amd64"),
+			scheduling.NewRequirement("karpenter.sh/instance-category", corev1.NodeSelectorOpIn, "flex"),
+			scheduling.NewRequirement("node.kubernetes.io/instance-type", corev1.NodeSelectorOpIn, instanceName),
+		)
+		
+		capacity := corev1.ResourceList{
+			corev1.ResourceCPU:    *resource.NewQuantity(int64(config.ocpus)*2000, resource.DecimalSI),
+			corev1.ResourceMemory: *resource.NewQuantity(int64(config.memoryGB)*1024*1024*1024, resource.BinarySI),
+			corev1.ResourcePods:   *resource.NewQuantity(110, resource.DecimalSI),
+			corev1.ResourceEphemeralStorage: *resource.NewQuantity(100*1024*1024*1024, resource.BinarySI),
+		}
+		
+		offerings := p.createOfferings(shape.Name, float32(config.ocpus), float32(config.memoryGB), true)
+		
+		overhead := &cloudprovider.InstanceTypeOverhead{
+			KubeReserved: corev1.ResourceList{
+				corev1.ResourceCPU:    *resource.NewMilliQuantity(100, resource.DecimalSI),
+				corev1.ResourceMemory: *resource.NewQuantity(500*1024*1024, resource.BinarySI),
+			},
+			SystemReserved: corev1.ResourceList{
+				corev1.ResourceCPU:    *resource.NewMilliQuantity(100, resource.DecimalSI),
+				corev1.ResourceMemory: *resource.NewQuantity(500*1024*1024, resource.BinarySI),
+			},
+			EvictionThreshold: corev1.ResourceList{
+				corev1.ResourceMemory: *resource.NewQuantity(100*1024*1024, resource.BinarySI),
+			},
+		}
+		
+		instanceTypes = append(instanceTypes, &cloudprovider.InstanceType{
+			Name:         instanceName,
+			Requirements: requirements,
+			Offerings:    offerings,
+			Capacity:     capacity,
+			Overhead:     overhead,
+		})
+	}
+	
+	return instanceTypes
 }
