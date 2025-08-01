@@ -579,7 +579,8 @@ func (p *InstanceTypeProvider) generateFlexibleInstanceTypes(shape *Shape) []*cl
 			scheduling.NewRequirement(corev1.LabelInstanceTypeStable, corev1.NodeSelectorOpIn, instanceName),
 			scheduling.NewRequirement(corev1.LabelArchStable, corev1.NodeSelectorOpIn, "amd64"),
 			scheduling.NewRequirement("karpenter.sh/instance-category", corev1.NodeSelectorOpIn, "flex"),
-			scheduling.NewRequirement("node.kubernetes.io/instance-type", corev1.NodeSelectorOpIn, instanceName),
+			scheduling.NewRequirement("node.kubernetes.io/instance-type", corev1.NodeSelectorOpIn, shape.Name, instanceName),
+			scheduling.NewRequirement("oci.oraclecloud.com/shape", corev1.NodeSelectorOpIn, shape.Name),
 		)
 		
 		capacity := corev1.ResourceList{
