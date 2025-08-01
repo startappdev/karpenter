@@ -32,6 +32,7 @@ import (
 
 	v1 "sigs.k8s.io/karpenter/pkg/apis/v1"
 	"sigs.k8s.io/karpenter/pkg/cloudprovider"
+	"sigs.k8s.io/karpenter/pkg/providers/oci/apis/v1alpha1"
 )
 
 const (
@@ -213,9 +214,9 @@ func (p *Provider) Name() string {
 func (p *Provider) GetSupportedNodeClasses() []status.Object {
 	// Return OCINodeClass as the supported node class for OCI provider
 	return []status.Object{
-		&OCINodeClass{
+		&v1alpha1.OCINodeClass{
 			TypeMeta: metav1.TypeMeta{
-				APIVersion: "karpenter.sh/v1",
+				APIVersion: "karpenter.sh/v1alpha1",
 				Kind:       "OCINodeClass",
 			},
 		},

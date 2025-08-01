@@ -1,0 +1,29 @@
+# Minimal NodePool for testing
+apiVersion: karpenter.sh/v1
+kind: NodePool
+metadata:
+  name: oci-test-pool
+  namespace: karpenter
+spec:
+  template:
+    metadata:
+      labels:
+        test-pool: "true"
+    spec:
+      requirements:
+        - key: kubernetes.io/arch
+          operator: In
+          values: ["amd64"]
+        - key: node.kubernetes.io/instance-type
+          operator: In
+          values: ["VM.Standard.E4.Flex"]
+      nodeClassRef:
+        apiVersion: "karpenter.sh/v1alpha1"
+        group: "karpenter.sh"
+        kind: "OCINodeClass"
+        name: "default"
+  disruption:
+    consolidationPolicy: WhenEmpty
+    consolidateAfter: 30s
+  limits:
+    cpu: "100"

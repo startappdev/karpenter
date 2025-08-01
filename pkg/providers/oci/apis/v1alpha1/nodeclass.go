@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package oci
+package v1alpha1
 
 import (
 	"github.com/awslabs/operatorpkg/status"
@@ -136,12 +136,3 @@ type OCINodeClassList struct {
 	Items           []OCINodeClass `json:"items"`
 }
 
-func init() {
-	// Register the types with the scheme
-	SchemeGroupVersion = schema.GroupVersion{Group: "karpenter.sh", Version: "v1"}
-}
-
-var (
-	// SchemeGroupVersion is group version used to register these objects
-	SchemeGroupVersion = schema.GroupVersion{Group: "karpenter.sh", Version: "v1"}
-)

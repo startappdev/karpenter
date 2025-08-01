@@ -1,0 +1,87 @@
+# Fixed NodePools for Karpenter OCI provider testing
+---
+# NodePool for E4 Flexible shapes
+apiVersion: karpenter.sh/v1
+kind: NodePool
+metadata:
+  name: oci-e4-flex-pool
+  namespace: karpenter
+spec:
+  template:
+    metadata:
+      labels:
+        karpenter.sh/nodepool: oci-e4-flex-pool
+        node-type: flexible
+        shape-family: e4
+    spec:
+      requirements:
+        - key: kubernetes.io/arch
+          operator: In
+          values: ["amd64"]
+        - key: kubernetes.io/os
+          operator: In
+          values: ["linux"]
+        - key: karpenter.sh/capacity-type
+          operator: In
+          values: ["on-demand"]
+        - key: node.kubernetes.io/instance-type
+          operator: In
+          values: ["VM.Standard.E4.Flex"]
+      nodeClassRef:
+        apiVersion: karpenter.k8s.aws/v1beta1
+        kind: EC2NodeClass
+        name: default
+      taints:
+        - key: node-type
+          value: "flexible-e4"
+          effect: NoSchedule
+  disruption:
+    consolidationPolicy: WhenEmpty
+    consolidateAfter: 30s
+  limits:
+    cpu: "1000"
+    memory: "1000Gi"
+  weight: 10
+---
+# NodePool for E5 Flexible shapes
+apiVersion: karpenter.sh/v1
+kind: NodePool
+metadata:
+  name: oci-e5-flex-pool
+  namespace: karpenter
+spec:
+  template:
+    metadata:
+      labels:
+        karpenter.sh/nodepool: oci-e5-flex-pool
+        node-type: flexible
+        shape-family: e5
+    spec:
+      requirements:
+        - key: kubernetes.io/arch
+          operator: In
+          values: ["amd64"]
+        - key: kubernetes.io/os
+          operator: In
+          values: ["linux"]
+        - key: karpenter.sh/capacity-type
+          operator: In
+          values: ["on-demand"]
+        - key: node.kubernetes.io/instance-type
+          operator: In
+          values: ["VM.Standard.E5.Flex"]
+      nodeClassRef:
+        apiVersion: karpenter.k8s.aws/v1beta1
+        kind: EC2NodeClass
+        name: default
+      taints:
+        - key: node-type
+          value: "flexible-e5"
+          effect: NoSchedule
+  disruption:
+    consolidationPolicy: WhenEmpty
+    consolidateAfter: 30s
+  limits:
+    cpu: "2000"
+    memory: "2000Gi"
+  weight: 20

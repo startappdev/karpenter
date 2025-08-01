@@ -1,0 +1,13 @@
+# Placeholder EC2NodeClass for testing
+# This is needed because NodePool requires a nodeClassRef
+apiVersion: karpenter.k8s.aws/v1beta1
+kind: EC2NodeClass
+metadata:
+  name: default
+  namespace: karpenter
+spec:
+  amiFamily: AL2
+  instanceStorePolicy: RAID0
+  userData: |
+    #!/bin/bash
+    echo "OCI node initialization"
