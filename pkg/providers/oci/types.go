@@ -31,6 +31,7 @@ type Config struct {
 	// Regional settings
 	Region         string
 	CompartmentID  string
+	ClusterID      string // OKE cluster OCID
 
 	// Network configuration
 	VCNID     string

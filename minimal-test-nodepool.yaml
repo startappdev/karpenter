@@ -1,0 +1,51 @@
+apiVersion: karpenter.sh/v1
+kind: NodePool
+metadata:
+  name: minimal-test-pool
+spec:
+  # Template configuration
+  template:
+    metadata:
+      labels:
+        karpenter.sh/test: "true"
+        node-type: "karpenter-minimal-test"
+    spec:
+      requirements:
+        - key: karpenter.sh/capacity-type
+          operator: In
+          values: ["on-demand"]  # Use on-demand for initial testing
+        - key: node.kubernetes.io/instance-type
+          operator: In
+          values: 
+            - "VM.Standard.E4.Flex-1-1"  # Smallest possible: 1 OCPU, 1 GB RAM
+      nodeClassRef:
+        apiVersion: karpenter.sh/v1alpha1
+        kind: OCINodeClass
+        name: default
+      # Minimal resources for testing
+      resources:
+        requests:
+          cpu: "100m"     # Very small request
+          memory: "128Mi" # Very small request
+      # Add taints to prevent production workloads
+      taints:
+        - key: karpenter.sh/test
+          value: "true"
+          effect: NoSchedule
+  # Disruption settings for quick cleanup
+  disruption:
+    ttlSecondsAfterEmpty: 30  # Delete node 30 seconds after empty
+  # Very small limits for cost control
+  limits:
+    cpu: "2"      # Max 2 CPUs total
+    memory: "2Gi" # Max 2 GB total
+---
+apiVersion: karpenter.sh/v1alpha1
+kind: OCINodeClass
+metadata:
+  name: default
+spec:
+  # Shape configuration for minimal instance
+  shapeConfig:
+    ocpus: 1        # Minimum 1 OCPU
+    memoryInGBs: 1  # Minimum 1 GB RAM

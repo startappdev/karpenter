@@ -1,0 +1,36 @@
+apiVersion: karpenter.sh/v1
+kind: NodePool
+metadata:
+  name: minimal-test-pool
+spec:
+  # Disruption settings for quick cleanup
+  disruption:
+    consolidateAfter: 30s
+    consolidationPolicy: WhenEmpty
+  # Very small limits for cost control
+  limits:
+    cpu: "2"      # Max 2 CPUs total
+  # Template configuration
+  template:
+    metadata:
+      labels:
+        test-pool: "true"
+        karpenter-test: "minimal"
+    spec:
+      nodeClassRef:
+        group: karpenter.sh
+        kind: OCINodeClass
+        name: default
+      requirements:
+        - key: kubernetes.io/arch
+          operator: In
+          values: ["amd64"]
+        - key: node.kubernetes.io/instance-type
+          operator: In
+          values: 
+            - "VM.Standard.E4.Flex-1-1"  # Smallest: 1 OCPU, 1 GB RAM
+      # Add taints to prevent production workloads
+      taints:
+        - key: karpenter.sh/test
+          value: "true"
+          effect: NoSchedule

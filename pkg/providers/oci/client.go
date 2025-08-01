@@ -20,10 +20,13 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
+	"io"
+	"strings"
 	"time"
 
 	"github.com/oracle/oci-go-sdk/v65/common"
 	"github.com/oracle/oci-go-sdk/v65/common/auth"
+	"github.com/oracle/oci-go-sdk/v65/containerengine"
 	"github.com/oracle/oci-go-sdk/v65/core"
 	"github.com/oracle/oci-go-sdk/v65/identity"
 	"github.com/samber/lo"
@@ -35,9 +38,10 @@ import (
 
 // Client wraps OCI API operations
 type Client struct {
-	config         *Config
-	computeClient  core.ComputeClient
-	configProvider common.ConfigurationProvider
+	config               *Config
+	computeClient        core.ComputeClient
+	containerEngineClient containerengine.ContainerEngineClient
+	configProvider       common.ConfigurationProvider
 }
 
 // NewClient creates a new OCI client
@@ -88,28 +92,44 @@ func NewClient(config *Config) (*Client, error) {
 		return nil, fmt.Errorf("creating compute client: %w", err)
 	}
 
+	// Create container engine client
+	containerEngineClient, err := containerengine.NewContainerEngineClientWithConfigurationProvider(configProvider)
+	if err != nil {
+		return nil, fmt.Errorf("creating container engine client: %w", err)
+	}
+
 	// Override region if specified in config
 	if config.Region != "" {
 		computeClient.SetRegion(config.Region)
+		containerEngineClient.SetRegion(config.Region)
 	}
 
 	return &Client{
-		config:         config,
-		computeClient:  computeClient,
-		configProvider: configProvider,
+		config:               config,
+		computeClient:        computeClient,
+		containerEngineClient: containerEngineClient,
+		configProvider:       configProvider,
 	}, nil
 }
 
 // LaunchInstance launches a standard instance with fixed shape
 func (c *Client) LaunchInstance(ctx context.Context, nodeClaim *v1.NodeClaim, shape string) (*Instance, error) {
 	logger := log.FromContext(ctx)
-	logger.Info("launching OCI instance", "shape", shape)
+	logger.Info("launching OCI instance", 
+		"shape", shape,
+		"nodeClaim", nodeClaim.Name,
+		"nodePool", nodeClaim.Labels[v1.NodePoolLabelKey],
+		"compartmentID", c.config.CompartmentID,
+		"clusterID", c.config.ClusterID,
+		"imageID", c.config.ImageID)
 
 	// Get availability domains for the compartment
 	ad, err := c.getAvailabilityDomain(ctx)
 	if err != nil {
+		logger.Error(err, "failed to get availability domain")
 		return nil, fmt.Errorf("getting availability domain: %w", err)
 	}
+	logger.Info("selected availability domain", "ad", ad)
 
 	var ociInstance core.Instance
 	err = WithRetry(ctx, DefaultRetryConfig(), "launch-instance", func() error {
@@ -140,17 +160,27 @@ func (c *Client) LaunchInstance(ctx context.Context, nodeClaim *v1.NodeClaim, sh
 			},
 		}
 
+		// Log the launch request details
+		logger.Info("sending launch instance request",
+			"displayName", *request.LaunchInstanceDetails.DisplayName,
+			"subnet", *request.LaunchInstanceDetails.CreateVnicDetails.SubnetId)
+
 		// Launch the instance
 		response, err := c.computeClient.LaunchInstance(ctx, request)
 		if err != nil {
+			logger.Error(err, "failed to launch instance")
 			return WrapOCIError(err, "instance")
 		}
 
 		ociInstance = response.Instance
+		logger.Info("instance launched successfully",
+			"instanceID", *ociInstance.Id,
+			"lifecycleState", ociInstance.LifecycleState)
 		return nil
 	})
 	
 	if err != nil {
+		logger.Error(err, "failed to launch instance after retries")
 		return nil, HandleError(ctx, err, "launch-instance")
 	}
 
@@ -511,6 +541,51 @@ func (c *Client) WaitForInstanceReady(ctx context.Context, instanceID string) er
 	})
 }
 
+// GetClusterDetails retrieves OKE cluster information including endpoint and certificates
+func (c *Client) GetClusterDetails(ctx context.Context) (*containerengine.Cluster, error) {
+	logger := log.FromContext(ctx)
+	logger.Info("getting OKE cluster details", "clusterID", c.config.ClusterID)
+
+	if c.config.ClusterID == "" {
+		return nil, fmt.Errorf("cluster ID is not configured")
+	}
+
+	request := containerengine.GetClusterRequest{
+		ClusterId: &c.config.ClusterID,
+	}
+
+	response, err := c.containerEngineClient.GetCluster(ctx, request)
+	if err != nil {
+		return nil, fmt.Errorf("getting cluster details: %w", err)
+	}
+
+	return &response.Cluster, nil
+}
+
+// CreateClusterKubeconfig generates kubeconfig for the cluster
+func (c *Client) CreateClusterKubeconfig(ctx context.Context) (string, error) {
+	logger := log.FromContext(ctx)
+	logger.Info("creating cluster kubeconfig", "clusterID", c.config.ClusterID)
+
+	request := containerengine.CreateKubeconfigRequest{
+		ClusterId: &c.config.ClusterID,
+	}
+
+	response, err := c.containerEngineClient.CreateKubeconfig(ctx, request)
+	if err != nil {
+		return "", fmt.Errorf("creating kubeconfig: %w", err)
+	}
+
+	// Read the kubeconfig from the response
+	buf := new(strings.Builder)
+	_, err = io.Copy(buf, response.Content)
+	if err != nil {
+		return "", fmt.Errorf("reading kubeconfig: %w", err)
+	}
+
+	return buf.String(), nil
+}
+
 // Helper methods
 
 // getAvailabilityDomain gets the first available availability domain
@@ -576,54 +651,153 @@ func (c *Client) shouldUsePreemptible(nodeClaim *v1.NodeClaim) bool {
 }
 
 func (c *Client) buildMetadata(nodeClaim *v1.NodeClaim) map[string]string {
+	logger := log.Log.WithValues("nodeClaim", nodeClaim.Name)
 	metadata := make(map[string]string)
 	
 	// Add standard metadata
 	metadata["karpenter.sh/nodeclaim"] = nodeClaim.Name
 	metadata["karpenter.sh/nodepool"] = nodeClaim.Labels[v1.NodePoolLabelKey]
 	
-	// Add user data for node initialization
-	// OKE requires cloud-init to bootstrap nodes and join them to the cluster
-	// The oke_init_script is a special metadata key that OKE uses to bootstrap nodes
-	cloudInitScript := `#!/bin/bash
-# OKE Node Bootstrap Script
-# This script is executed by cloud-init to join the node to the OKE cluster
+	logger.Info("building metadata for instance",
+		"clusterID", c.config.ClusterID,
+		"nodeClaim", nodeClaim.Name)
+	
+	// Get cluster details for bootstrap script
+	ctx := context.Background()
+	cluster, err := c.GetClusterDetails(ctx)
+	if err != nil {
+		// Log error but continue with basic metadata
+		logger.Error(err, "failed to get cluster details for bootstrap script",
+			"clusterID", c.config.ClusterID)
+		metadata["user_data"] = base64.StdEncoding.EncodeToString([]byte("#!/bin/bash\necho 'Failed to get cluster details'"))
+		return metadata
+	}
 
-# Wait for OKE metadata to be available
-attempts=0
-while [ $attempts -lt 60 ]; do
-    if curl -f -H "Authorization: Bearer Oracle" http://169.254.169.254/opc/v2/instance/metadata/oke_init_script > /dev/null 2>&1; then
-        break
-    fi
-    echo "Waiting for OKE metadata service..."
-    sleep 5
-    attempts=$((attempts + 1))
-done
+	// Extract cluster endpoint
+	var clusterEndpoint string
+	if cluster.Endpoints != nil && cluster.Endpoints.Kubernetes != nil {
+		clusterEndpoint = *cluster.Endpoints.Kubernetes
+	}
+	
+	logger.Info("got cluster details",
+		"clusterName", lo.FromPtr(cluster.Name),
+		"clusterEndpoint", clusterEndpoint,
+		"kubernetesVersion", lo.FromPtr(cluster.KubernetesVersion),
+		"lifecycleState", cluster.LifecycleState)
 
-# Download and execute the OKE initialization script
+	// Get CA certificate from cluster
+	var caCertData string
+	if cluster.ClusterPodNetworkOptions != nil && len(cluster.ClusterPodNetworkOptions) > 0 {
+		// Extract CA cert from cluster metadata if available
+		// Note: The actual CA cert location may vary, this is a placeholder
+		logger.Info("cluster pod network options available")
+	}
+	
+	// For self-managed nodes, we need to create a kubeconfig
+	kubeconfig, err := c.CreateClusterKubeconfig(ctx)
+	if err != nil {
+		logger.Error(err, "failed to create kubeconfig, falling back to basic script")
+		// Fall back to the default OKE init script approach
+		cloudInitScript := `#!/bin/bash
+# OKE Node Bootstrap Script for Karpenter
+# Fallback to default OKE initialization
+
+set -e
+
+echo "Starting OKE node bootstrap"
+
+# Try to use the default OKE init script from metadata
 curl --fail -H "Authorization: Bearer Oracle" -L0 http://169.254.169.254/opc/v2/instance/metadata/oke_init_script | base64 --decode >/var/run/oke-init.sh
 
-# Make the script executable and run it
-chmod +x /var/run/oke-init.sh
-bash /var/run/oke-init.sh
-
-# Log the result
-if [ $? -eq 0 ]; then
-    echo "OKE node initialization completed successfully"
+# Check if the script was downloaded successfully
+if [ -f /var/run/oke-init.sh ]; then
+    echo "Running OKE init script"
+    bash /var/run/oke-init.sh
 else
-    echo "OKE node initialization failed"
+    echo "Failed to download OKE init script"
     exit 1
 fi
 `
+		metadata["user_data"] = base64.StdEncoding.EncodeToString([]byte(cloudInitScript))
+		return metadata
+	}
+	
+	// Extract CA certificate from kubeconfig
+	kubeconfigLines := strings.Split(kubeconfig, "\n")
+	for _, line := range kubeconfigLines {
+		if strings.Contains(line, "certificate-authority-data:") {
+			parts := strings.Split(line, ": ")
+			if len(parts) >= 2 {
+				caCertData = strings.TrimSpace(parts[1])
+				break
+			}
+		}
+	}
+	
+	// Create OKE bootstrap script for self-managed nodes
+	cloudInitScript := fmt.Sprintf(`#!/bin/bash
+# OKE Node Bootstrap Script for Karpenter
+# Self-managed node bootstrap
+
+set -e
+
+echo "Starting OKE node bootstrap for cluster %s"
+
+# Extend boot volume if needed
+if [ -f /usr/libexec/oci-growfs ]; then
+    echo "Extending boot volume"
+    bash /usr/libexec/oci-growfs -y
+fi
+
+# Check if oke-install.sh exists (for self-managed nodes)
+if [ -f /etc/oke/oke-install.sh ]; then
+    echo "Running OKE install script for self-managed node"
+    # Extract endpoint without port (OKE expects endpoint without :6443)
+    ENDPOINT="%s"
+    ENDPOINT_NO_PORT=$(echo $ENDPOINT | sed 's/:6443$//')
+    
+    # Run the OKE install script with cluster endpoint and CA cert
+    bash /etc/oke/oke-install.sh \
+        --apiserver-endpoint "$ENDPOINT_NO_PORT" \
+        --kubelet-ca-cert "%s" \
+        --kubelet-extra-args "--cloud-provider=external --node-labels=karpenter.sh/nodeclaim=%s,karpenter.sh/nodepool=%s,karpenter.sh/managed=true"
+else
+    # Fallback: Try the default OKE metadata approach
+    echo "oke-install.sh not found, trying metadata approach"
+    curl --fail -H "Authorization: Bearer Oracle" -L0 http://169.254.169.254/opc/v2/instance/metadata/oke_init_script | base64 --decode >/var/run/oke-init.sh
+    if [ -f /var/run/oke-init.sh ]; then
+        bash /var/run/oke-init.sh
+    else
+        echo "Failed to bootstrap node"
+        exit 1
+    fi
+fi
+
+echo "OKE node bootstrap completed"
+`, c.config.ClusterID, clusterEndpoint, caCertData, nodeClaim.Name, nodeClaim.Labels[v1.NodePoolLabelKey])
 	
 	// In OCI, user_data must be base64-encoded
-	metadata["user_data"] = base64.StdEncoding.EncodeToString([]byte(cloudInitScript))
+	encodedScript := base64.StdEncoding.EncodeToString([]byte(cloudInitScript))
+	metadata["user_data"] = encodedScript
+	
+	// Log the cloud-init script for debugging (first 500 chars)
+	scriptPreview := cloudInitScript
+	if len(scriptPreview) > 500 {
+		scriptPreview = scriptPreview[:500] + "..."
+	}
+	logger.Info("generated cloud-init script",
+		"preview", scriptPreview,
+		"caCertDataPresent", caCertData != "",
+		"clusterEndpoint", clusterEndpoint)
 	
 	// Add any additional metadata that might be needed for OKE
 	// For example, if there's an SSH key specified
 	if sshKey, ok := nodeClaim.Annotations["karpenter.sh/ssh-key"]; ok {
 		metadata["ssh_authorized_keys"] = sshKey
 	}
+	
+	// Add OKE-specific metadata
+	metadata["oke_cluster_id"] = c.config.ClusterID
 	
 	return metadata
 }

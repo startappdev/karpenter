@@ -120,6 +120,7 @@ func createOCIProvider(ctx context.Context) (*oci.Provider, error) {
 		AuthType:              authType,
 		Region:                os.Getenv("OCI_REGION"),
 		CompartmentID:         os.Getenv("OCI_COMPARTMENT_ID"),
+		ClusterID:             os.Getenv("OCI_CLUSTER_ID"),
 		SubnetIDs:             subnetIDs,
 		ImageID:               os.Getenv("OCI_IMAGE_ID"),
 		DefaultShapes:         []string{"VM.Standard.E4.Flex", "VM.Standard.E5.Flex"},
