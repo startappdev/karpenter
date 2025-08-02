@@ -149,7 +149,7 @@ func (c *Client) LaunchInstance(ctx context.Context, nodeClaim *v1.NodeClaim, no
 				
 				// Network configuration
 				CreateVnicDetails: &core.CreateVnicDetails{
-					SubnetId:       common.String(c.selectSubnet()),
+					SubnetId:       common.String(c.selectSubnet(nodeClass)),
 					AssignPublicIp: common.Bool(false),
 					DisplayName:    common.String(fmt.Sprintf("karpenter-%s", nodeClaim.Name)),
 				},
@@ -251,7 +251,7 @@ func (c *Client) LaunchFlexibleInstance(ctx context.Context, nodeClaim *v1.NodeC
 				
 				// Network configuration
 				CreateVnicDetails: &core.CreateVnicDetails{
-					SubnetId:       common.String(c.selectSubnet()),
+					SubnetId:       common.String(c.selectSubnet(nodeClass)),
 					AssignPublicIp: common.Bool(false),
 					DisplayName:    common.String(fmt.Sprintf("karpenter-%s", nodeClaim.Name)),
 				},
@@ -622,8 +622,12 @@ func (c *Client) selectAvailabilityDomain() string {
 	return fmt.Sprintf("AD-%d", 1)
 }
 
-func (c *Client) selectSubnet() string {
-	// In real implementation, this would select based on capacity and spread
+func (c *Client) selectSubnet(nodeClass *v1alpha1.OCINodeClass) string {
+	// Use subnets from NodeClass if specified, otherwise fall back to config
+	if len(nodeClass.Spec.SubnetIDs) > 0 {
+		// In real implementation, this would select based on capacity and spread
+		return nodeClass.Spec.SubnetIDs[0]
+	}
 	if len(c.config.SubnetIDs) > 0 {
 		return c.config.SubnetIDs[0]
 	}

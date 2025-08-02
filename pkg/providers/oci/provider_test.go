@@ -56,8 +56,16 @@ var _ = Describe("OCI Provider", func() {
 			DefaultShapes: []string{"VM.Standard.E4.Flex", "VM.Standard.E5.Flex"},
 		}
 		
+		// Create a fake Kubernetes client with scheme
+		scheme := runtime.NewScheme()
+		_ = v1.SchemeBuilder.AddToScheme(scheme)
+		_ = v1alpha1.SchemeBuilder.AddToScheme(scheme)
+		fakeClient := fakecr.NewClientBuilder().
+			WithScheme(scheme).
+			Build()
+		
 		var err error
-		provider, err = oci.NewProvider(ctx, config)
+		provider, err = oci.NewProvider(ctx, config, fakeClient)
 		Expect(err).ToNot(HaveOccurred())
 		
 		// Create test NodePool
@@ -314,8 +322,16 @@ var _ = Describe("Shape Configuration Parsing", func() {
 			SubnetIDs:     []string{"test"},
 		}
 		
+		// Create a fake Kubernetes client
+		scheme := runtime.NewScheme()
+		_ = v1.SchemeBuilder.AddToScheme(scheme)
+		_ = v1alpha1.SchemeBuilder.AddToScheme(scheme)
+		fakeClient := fakecr.NewClientBuilder().
+			WithScheme(scheme).
+			Build()
+		
 		var err error
-		provider, err = oci.NewProvider(context.Background(), config)
+		provider, err = oci.NewProvider(context.Background(), config, fakeClient)
 		Expect(err).ToNot(HaveOccurred())
 	})
 
