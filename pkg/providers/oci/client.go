@@ -700,7 +700,11 @@ func (c *Client) buildMetadata(nodeClaim *v1.NodeClaim) map[string]string {
 		"clusterEndpoint", clusterEndpoint,
 		"kubernetesVersion", lo.FromPtr(cluster.KubernetesVersion),
 		"lifecycleState", cluster.LifecycleState,
-		"clusterType", cluster.Type)
+		"clusterType", cluster.Type,
+		"endpointsNil", cluster.Endpoints == nil,
+		"publicEndpointNil", cluster.Endpoints == nil || cluster.Endpoints.PublicEndpoint == nil,
+		"privateEndpointNil", cluster.Endpoints == nil || cluster.Endpoints.PrivateEndpoint == nil,
+		"kubernetesEndpointNil", cluster.Endpoints == nil || cluster.Endpoints.Kubernetes == nil)
 
 	// Get CA certificate from cluster
 	var caCertData string
