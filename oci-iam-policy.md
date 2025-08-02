@@ -4,15 +4,30 @@ The following IAM policies are required for Karpenter to work with instance prin
 
 ## 1. Dynamic Group for Karpenter Controller
 
-First, create a dynamic group that includes the Karpenter controller instance(s):
+First, create a dynamic group that includes the nodes where Karpenter can run. Choose the most appropriate option:
 
+### Option A: All OKE Worker Nodes (Recommended)
+This allows Karpenter to run on any node in the cluster:
 ```
-ALL {instance.compartment.id = '<compartment-ocid>', tag.<tag-namespace>.<tag-key>.value = 'karpenter-controller'}
+ALL {instance.compartment.id = '<compartment-ocid>', tag.oke-cluster.value = '<cluster-ocid>'}
 ```
 
-Or if running in OKE:
+### Option B: Specific Node Pool
+If Karpenter runs in a dedicated node pool:
 ```
-ALL {instance.compartment.id = '<compartment-ocid>', instance.id = '<instance-ocid-of-node-running-karpenter>'}
+ALL {instance.compartment.id = '<compartment-ocid>', tag.oke-node-pool.value = '<node-pool-ocid>'}
+```
+
+### Option C: Tagged Nodes
+For fine-grained control, tag specific nodes:
+```
+ALL {instance.compartment.id = '<compartment-ocid>', tag.karpenter-controller.value = 'true'}
+```
+
+### Option D: Single Instance (Not Recommended)
+Only for testing - not suitable for production:
+```
+ALL {instance.id = '<instance-ocid-of-node-running-karpenter>'}
 ```
 
 ## 2. Required IAM Policies
