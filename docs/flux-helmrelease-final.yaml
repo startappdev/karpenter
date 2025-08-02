@@ -18,7 +18,7 @@ spec:
   values:
     image:
       repository: ghcr.io/startappdev/karpenter
-      tag: "start-io-1da0394"
+      tag: "nodeclass-image-fix"
     
     # Reference your existing secret
     oci:
