@@ -1,0 +1,33 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: flexible-shape-test
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: flexible-shape-test
+  template:
+    metadata:
+      labels:
+        app: flexible-shape-test
+    spec:
+      nodeSelector:
+        karpenter.sh/nodepool: oci-test-pool
+        # Request E4.Flex shape with 2 OCPUs and 32GB memory
+        node.kubernetes.io/instance-type: VM.Standard.E4.Flex-2-32
+      tolerations:
+        - key: test-pool
+          value: "true"
+          effect: NoSchedule
+      containers:
+        - name: test
+          image: nginx:alpine
+          resources:
+            requests:
+              cpu: "1500m"
+              memory: "30Gi"
+            limits:
+              cpu: "2000m"
+              memory: "32Gi"
