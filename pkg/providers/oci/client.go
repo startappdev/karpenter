@@ -34,6 +34,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	v1 "sigs.k8s.io/karpenter/pkg/apis/v1"
+	"sigs.k8s.io/karpenter/pkg/providers/oci/apis/v1alpha1"
 )
 
 // Client wraps OCI API operations
@@ -113,7 +114,7 @@ func NewClient(config *Config) (*Client, error) {
 }
 
 // LaunchInstance launches a standard instance with fixed shape
-func (c *Client) LaunchInstance(ctx context.Context, nodeClaim *v1.NodeClaim, shape string) (*Instance, error) {
+func (c *Client) LaunchInstance(ctx context.Context, nodeClaim *v1.NodeClaim, nodeClass *v1alpha1.OCINodeClass, shape string) (*Instance, error) {
 	logger := log.FromContext(ctx)
 	logger.Info("launching OCI instance", 
 		"shape", shape,
@@ -121,7 +122,7 @@ func (c *Client) LaunchInstance(ctx context.Context, nodeClaim *v1.NodeClaim, sh
 		"nodePool", nodeClaim.Labels[v1.NodePoolLabelKey],
 		"compartmentID", c.config.CompartmentID,
 		"clusterID", c.config.ClusterID,
-		"imageID", c.config.ImageID)
+		"imageID", nodeClass.Spec.ImageID)
 
 	// Get availability domains for the compartment
 	ad, err := c.getAvailabilityDomain(ctx)
@@ -143,7 +144,7 @@ func (c *Client) LaunchInstance(ctx context.Context, nodeClaim *v1.NodeClaim, sh
 				
 				// Source details - using platform image
 				SourceDetails: &core.InstanceSourceViaImageDetails{
-					ImageId: &c.config.ImageID,
+					ImageId: &nodeClass.Spec.ImageID,
 				},
 				
 				// Network configuration
@@ -188,7 +189,7 @@ func (c *Client) LaunchInstance(ctx context.Context, nodeClaim *v1.NodeClaim, sh
 	instance := &Instance{
 		ID:                 *ociInstance.Id,
 		Shape:              *ociInstance.Shape,
-		ImageID:            c.config.ImageID,
+		ImageID:            nodeClass.Spec.ImageID,
 		CompartmentID:      *ociInstance.CompartmentId,
 		AvailabilityDomain: *ociInstance.AvailabilityDomain,
 		State:              string(ociInstance.LifecycleState),
@@ -207,7 +208,7 @@ func (c *Client) LaunchInstance(ctx context.Context, nodeClaim *v1.NodeClaim, sh
 }
 
 // LaunchFlexibleInstance launches a flexible shape instance with custom CPU/memory
-func (c *Client) LaunchFlexibleInstance(ctx context.Context, nodeClaim *v1.NodeClaim, shapeConfig *ShapeConfig) (*Instance, error) {
+func (c *Client) LaunchFlexibleInstance(ctx context.Context, nodeClaim *v1.NodeClaim, nodeClass *v1alpha1.OCINodeClass, shapeConfig *ShapeConfig) (*Instance, error) {
 	logger := log.FromContext(ctx)
 	
 	// Determine shape family from NodePool configuration
@@ -245,7 +246,7 @@ func (c *Client) LaunchFlexibleInstance(ctx context.Context, nodeClaim *v1.NodeC
 				
 				// Source details - using platform image
 				SourceDetails: &core.InstanceSourceViaImageDetails{
-					ImageId: &c.config.ImageID,
+					ImageId: &nodeClass.Spec.ImageID,
 				},
 				
 				// Network configuration
@@ -290,7 +291,7 @@ func (c *Client) LaunchFlexibleInstance(ctx context.Context, nodeClaim *v1.NodeC
 		ID:                 *ociInstance.Id,
 		Shape:              *ociInstance.Shape,
 		ShapeConfig:        shapeConfig,
-		ImageID:            c.config.ImageID,
+		ImageID:            nodeClass.Spec.ImageID,
 		CompartmentID:      *ociInstance.CompartmentId,
 		AvailabilityDomain: *ociInstance.AvailabilityDomain,
 		State:              string(ociInstance.LifecycleState),

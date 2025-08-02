@@ -22,6 +22,7 @@ import (
 	"os"
 	"strings"
 
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	
 	"sigs.k8s.io/karpenter/pkg/operator"
@@ -41,7 +42,7 @@ func main() {
 	ctx, op := operator.NewOperator()
 	
 	// Create OCI provider
-	ociProvider, err := createOCIProvider(ctx)
+	ociProvider, err := createOCIProvider(ctx, op.GetClient())
 	if err != nil {
 		log.FromContext(ctx).Error(err, "failed to create OCI provider")
 		os.Exit(1)
@@ -99,7 +100,7 @@ func verifyEnvironment() {
 }
 
 // createOCIProvider creates and configures the OCI cloud provider
-func createOCIProvider(ctx context.Context) (*oci.Provider, error) {
+func createOCIProvider(ctx context.Context, kubeClient client.Client) (*oci.Provider, error) {
 	// Parse subnet IDs
 	subnetIDs := []string{}
 	if subnetIDsStr := os.Getenv("OCI_SUBNET_IDS"); subnetIDsStr != "" {
@@ -129,5 +130,5 @@ func createOCIProvider(ctx context.Context) (*oci.Provider, error) {
 	}
 	
 	log.FromContext(ctx).Info("Creating OCI provider", "config", config)
-	return oci.NewProvider(ctx, config)
+	return oci.NewProvider(ctx, config, kubeClient)
 }

@@ -19,6 +19,7 @@ package oci
 import (
 	"context"
 	"fmt"
+	stderrors "errors"
 	"strconv"
 	"strings"
 	"time"
@@ -26,8 +27,11 @@ import (
 	"github.com/awslabs/operatorpkg/status"
 	"github.com/samber/lo"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	v1 "sigs.k8s.io/karpenter/pkg/apis/v1"
@@ -44,13 +48,14 @@ var _ cloudprovider.CloudProvider = (*Provider)(nil)
 // Provider implements the CloudProvider interface for Oracle Cloud Infrastructure
 type Provider struct {
 	client               *Client
+	kubeClient           client.Client
 	instanceTypeCache    map[string][]*cloudprovider.InstanceType
 	pricingProvider      *PricingProvider
 	instanceTypeProvider *InstanceTypeProvider
 }
 
 // NewProvider creates a new OCI cloud provider
-func NewProvider(ctx context.Context, config *Config) (*Provider, error) {
+func NewProvider(ctx context.Context, config *Config, kubeClient client.Client) (*Provider, error) {
 	client, err := NewClient(config)
 	if err != nil {
 		return nil, fmt.Errorf("creating OCI client: %w", err)
@@ -61,6 +66,7 @@ func NewProvider(ctx context.Context, config *Config) (*Provider, error) {
 
 	return &Provider{
 		client:               client,
+		kubeClient:           kubeClient,
 		instanceTypeCache:    make(map[string][]*cloudprovider.InstanceType),
 		pricingProvider:      pricingProvider,
 		instanceTypeProvider: instanceTypeProvider,
@@ -71,6 +77,20 @@ func NewProvider(ctx context.Context, config *Config) (*Provider, error) {
 func (p *Provider) Create(ctx context.Context, nodeClaim *v1.NodeClaim) (*v1.NodeClaim, error) {
 	logger := log.FromContext(ctx)
 	logger.Info("creating OCI instance", "nodeClaim", nodeClaim.Name)
+
+	// Retrieve the OCINodeClass
+	nodeClass, err := p.resolveNodeClassFromNodeClaim(ctx, nodeClaim)
+	if err != nil {
+		if errors.IsNotFound(err) {
+			return nil, cloudprovider.NewInsufficientCapacityError(fmt.Errorf("resolving node class from nodeclaim, %w", err))
+		}
+		return nil, fmt.Errorf("resolving node class from nodeclaim, %w", err)
+	}
+
+	// Check if NodeClass is ready
+	if status := nodeClass.StatusConditions().Get(status.ConditionReady); status.IsFalse() {
+		return nil, cloudprovider.NewNodeClassNotReadyError(stderrors.New(status.Message))
+	}
 
 	// Extract instance type from requirements
 	instanceType := p.getInstanceTypeFromRequirements(nodeClaim.Spec.Requirements)
@@ -87,10 +107,10 @@ func (p *Provider) Create(ctx context.Context, nodeClaim *v1.NodeClaim) (*v1.Nod
 	if isDynamicShape {
 		// Extract shape configuration from instance type name (encoded in the format)
 		shapeConfig := p.parseShapeConfig(instanceType)
-		instance, err = p.client.LaunchFlexibleInstance(ctx, nodeClaim, shapeConfig)
+		instance, err = p.client.LaunchFlexibleInstance(ctx, nodeClaim, nodeClass, shapeConfig)
 	} else {
 		// Standard fixed shape instance
-		instance, err = p.client.LaunchInstance(ctx, nodeClaim, instanceType)
+		instance, err = p.client.LaunchInstance(ctx, nodeClaim, nodeClass, instanceType)
 	}
 	
 	if err != nil {
@@ -371,4 +391,13 @@ func (p *Provider) getDynamicInstanceTypes(ctx context.Context, nodePool *v1.Nod
 
 func (p *Provider) getStaticInstanceTypes(ctx context.Context, nodePool *v1.NodePool) ([]*cloudprovider.InstanceType, error) {
 	return p.instanceTypeProvider.GetStaticInstanceTypes(ctx, nodePool)
+}
+
+// resolveNodeClassFromNodeClaim retrieves the OCINodeClass referenced by the NodeClaim
+func (p *Provider) resolveNodeClassFromNodeClaim(ctx context.Context, nodeClaim *v1.NodeClaim) (*v1alpha1.OCINodeClass, error) {
+	nodeClass := &v1alpha1.OCINodeClass{}
+	if err := p.kubeClient.Get(ctx, types.NamespacedName{Name: nodeClaim.Spec.NodeClassRef.Name}, nodeClass); err != nil {
+		return nil, err
+	}
+	return nodeClass, nil
 }
