@@ -18,32 +18,15 @@ spec:
   values:
     image:
       repository: ghcr.io/startappdev/karpenter
-      tag: "final-fix-v1"
+      tag: "start-io-a9fdd12"  # Use the latest image with all fixes
     
-    # Reference your existing secret
+    # Use the new secret that has the correct values
     oci:
-      existingSecret: "oci-config"
-      existingSecretConfigKey: "config.yaml"
+      existingSecret: "oci-config-new"
     
-    # The controller still needs these as environment variables
-    controller:
-      env:
-        - name: OCI_REGION
-          value: "us-ashburn-1"  # Fixed to match your cluster location
-        - name: OCI_COMPARTMENT_ID
-          value: "ocid1.compartment.oc1..aaaaaaaalr5oi5mfqpjedsdsyn3vxn2fh2bltqezqrmk4bi7gaq6i245qnkq"
-        - name: OCI_CLUSTER_ID
-          value: "ocid1.cluster.oc1.iad.aaaaaaaazqquz2h5rspvdpafhnnmorehg2w3n2pveworuuovbcijgzk2jgda"
-        - name: OCI_SUBNET_IDS
-          value: "ocid1.subnet.oc1.iad.aaaaaaaaznwweno45m7klssbzt2kyl6qa4ec34335patiolemkti6d4ioita,ocid1.subnet.oc1.iad.aaaaaaaau6uekgrdd446pvmqt3zfhwkpnncn2jytqwlhokurxb54mnh46tca"
-        - name: OCI_IMAGE_ID
-          value: "ocid1.image.oc1.iad.aaaaaaaaspio4cg2ttycualigcfb74yd5ixp5ovryxfjesm7y7xiayjf53dq"
-        - name: CLUSTER_NAME
-          value: "your-cluster-name"  # REPLACE with your actual cluster name
-        - name: OCI_USE_INSTANCE_PRINCIPAL
-          value: "true"
-        - name: ENABLE_OCI_DYNAMIC_SHAPES
-          value: "true"
+    settings:
+      clusterName: "ashburn-ops-oke-stg"
+      logLevel: "info"
     
     # Node selector and tolerations
     nodeSelector:
