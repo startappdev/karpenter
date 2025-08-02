@@ -161,6 +161,21 @@ func (c *Client) LaunchInstance(ctx context.Context, nodeClaim *v1.NodeClaim, no
 			},
 		}
 
+		// Add shape config for flexible shapes
+		if isFlexibleShape(shape) {
+			// Parse shape name to extract OCPUs and memory
+			// Format: VM.Standard.E4.Flex-1-16 (1 OCPU, 16GB memory)
+			var ocpus, memory int32 = 1, 16
+			if _, err := fmt.Sscanf(shape, "VM.Standard.E4.Flex-%d-%d", &ocpus, &memory); err == nil {
+				request.LaunchInstanceDetails.ShapeConfig = &core.LaunchInstanceShapeConfigDetails{
+					Ocpus:       common.Float32(float32(ocpus)),
+					MemoryInGBs: common.Float32(float32(memory)),
+				}
+				logger.Info("added shape config for flexible shape", 
+					"ocpus", ocpus, "memory", memory)
+			}
+		}
+
 		// Log the launch request details
 		logger.Info("sending launch instance request",
 			"displayName", *request.LaunchInstanceDetails.DisplayName,
