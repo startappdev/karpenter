@@ -21,6 +21,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"io"
+	"strconv"
 	"strings"
 	"time"
 
@@ -161,26 +162,44 @@ func (c *Client) LaunchInstance(ctx context.Context, nodeClaim *v1.NodeClaim, no
 			},
 		}
 
-		// Add shape config for flexible shapes
+		// Handle flexible shapes - extract base shape and config
+		actualShape := shape
 		if isFlexibleShape(shape) {
 			// Parse shape name to extract OCPUs and memory
 			// Format: VM.Standard.E4.Flex-1-16 (1 OCPU, 16GB memory)
 			var ocpus, memory int32 = 1, 16
-			if _, err := fmt.Sscanf(shape, "VM.Standard.E4.Flex-%d-%d", &ocpus, &memory); err == nil {
-				request.LaunchInstanceDetails.ShapeConfig = &core.LaunchInstanceShapeConfigDetails{
-					Ocpus:       common.Float32(float32(ocpus)),
-					MemoryInGBs: common.Float32(float32(memory)),
+			
+			// Extract base shape name and config
+			parts := strings.Split(shape, "-")
+			if len(parts) >= 3 {
+				// Get base shape (e.g., VM.Standard.E4.Flex)
+				actualShape = strings.Join(parts[:len(parts)-2], "-")
+				
+				// Try to parse CPU and memory from the last two parts
+				if cpu, err := strconv.Atoi(parts[len(parts)-2]); err == nil {
+					ocpus = int32(cpu)
 				}
-				logger.Info("added shape config for flexible shape", 
-					"shape", shape, "ocpus", ocpus, "memory", memory)
+				if mem, err := strconv.Atoi(parts[len(parts)-1]); err == nil {
+					memory = int32(mem)
+				}
 			}
+			
+			request.LaunchInstanceDetails.ShapeConfig = &core.LaunchInstanceShapeConfigDetails{
+				Ocpus:       common.Float32(float32(ocpus)),
+				MemoryInGBs: common.Float32(float32(memory)),
+			}
+			logger.Info("added shape config for flexible shape", 
+				"originalShape", shape, "actualShape", actualShape, "ocpus", ocpus, "memory", memory)
 		}
+		
+		// Update the shape in the request
+		request.LaunchInstanceDetails.Shape = &actualShape
 
 		// Log the launch request details including shape config
 		logFields := []interface{}{
 			"displayName", *request.LaunchInstanceDetails.DisplayName,
 			"subnet", *request.LaunchInstanceDetails.CreateVnicDetails.SubnetId,
-			"shape", shape,
+			"shape", actualShape,
 		}
 		if request.LaunchInstanceDetails.ShapeConfig != nil {
 			logFields = append(logFields,

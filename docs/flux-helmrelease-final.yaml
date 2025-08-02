@@ -32,7 +32,13 @@ spec:
     
     settings:
       clusterName: "ashburn-ops-oke-stg"
-      logLevel: "info"
+      logLevel: "debug"
+    
+    # Add environment variable to enable OCI SDK debug logging
+    controller:
+      env:
+        - name: OCI_GO_SDK_DEBUG
+          value: "info"
     
     serviceAccount:
       create: false
