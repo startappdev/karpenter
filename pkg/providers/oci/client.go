@@ -701,9 +701,9 @@ func (c *Client) buildMetadata(nodeClaim *v1.NodeClaim) map[string]string {
 	logger := log.Log.WithValues("nodeClaim", nodeClaim.Name)
 	metadata := make(map[string]string)
 	
-	// Add standard metadata
-	metadata["karpenter.sh/nodeclaim"] = nodeClaim.Name
-	metadata["karpenter.sh/nodepool"] = nodeClaim.Labels[v1.NodePoolLabelKey]
+	// Add standard metadata - OCI doesn't allow "/" in metadata keys
+	metadata["karpenter_nodeclaim"] = nodeClaim.Name
+	metadata["karpenter_nodepool"] = nodeClaim.Labels[v1.NodePoolLabelKey]
 	
 	logger.Info("building metadata for instance",
 		"clusterID", c.config.ClusterID,
@@ -875,15 +875,18 @@ echo "OKE node bootstrap completed"
 func (c *Client) buildFreeformTags(nodeClaim *v1.NodeClaim) map[string]string {
 	tags := make(map[string]string)
 	
-	// Add Karpenter tags
-	tags["karpenter.sh/discovery"] = nodeClaim.Labels[v1.NodePoolLabelKey]
-	tags["karpenter.sh/nodeclaim"] = nodeClaim.Name
+	// Add Karpenter tags - OCI allows "/" in tag values but let's be consistent
+	tags["karpenter_discovery"] = nodeClaim.Labels[v1.NodePoolLabelKey]
+	tags["karpenter_nodeclaim"] = nodeClaim.Name
 	tags["Name"] = fmt.Sprintf("karpenter-%s", nodeClaim.Name)
 	
-	// Copy relevant labels as tags
+	// Copy relevant labels as tags, sanitizing keys
 	for k, v := range nodeClaim.Labels {
-		if isValidTagKey(k) {
-			tags[k] = v
+		// Replace invalid characters in key
+		sanitizedKey := strings.ReplaceAll(k, "/", "_")
+		sanitizedKey = strings.ReplaceAll(sanitizedKey, ".", "_")
+		if isValidTagKey(sanitizedKey) && len(sanitizedKey) > 0 {
+			tags[sanitizedKey] = v
 		}
 	}
 	
