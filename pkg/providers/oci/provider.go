@@ -102,7 +102,6 @@ func (p *Provider) Create(ctx context.Context, nodeClaim *v1.NodeClaim) (*v1.Nod
 	isDynamicShape := p.isDynamicShape(instanceType)
 	
 	var instance *Instance
-	var err error
 	
 	if isDynamicShape {
 		// Extract shape configuration from instance type name (encoded in the format)
