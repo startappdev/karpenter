@@ -24,7 +24,7 @@ spec:
   values:
     image:
       repository: ghcr.io/startappdev/karpenter
-      tag: "start-io-a9fdd12"  # Use the latest image with all fixes
+      tag: "start-io-2fb5e8d"  # Latest image with ShapeConfig fix and enhanced logging
     
     # Use the new secret that has the correct values
     oci:

@@ -878,7 +878,7 @@ func (c *Client) buildDefinedTags(nodeClaim *v1.NodeClaim) map[string]map[string
 }
 
 func isFlexibleShape(shape string) bool {
-	return len(shape) > 4 && (shape[len(shape)-4:] == "Flex" || shape[len(shape)-4:] == "flex")
+	return strings.Contains(shape, "Flex") || strings.Contains(shape, "flex")
 }
 
 func isValidTagKey(key string) bool {
