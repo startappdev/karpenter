@@ -1,56 +1,123 @@
-# OCI IAM Policies for Karpenter
+# OCI IAM Policy Setup for Karpenter
 
-This document describes the required IAM policies for Karpenter to manage OCI compute instances.
+This document describes the IAM policies required for Karpenter to manage OCI compute instances for OKE clusters.
 
-## Option 1: Instance Principal (Recommended)
+## Overview
 
-### Step 1: Create Dynamic Group
+Karpenter requires specific IAM permissions to:
+- Launch and terminate compute instances
+- Manage networking for instances
+- Access cluster information
+- Read available shapes and images
+- Monitor capacity
 
-Create a dynamic group that includes all instances in your OKE cluster:
+## Dynamic Group Configuration
+
+### Existing Dynamic Group: karpenter-nodes-dg
+
+- **OCID**: `ocid1.dynamicgroup.oc1..aaaaaaaanmiqapuxzo3ye2uqp7uzvf7plvftwxvmjhekdrnwcisp46tcplmq`
+- **Purpose**: Grants permissions to all OKE worker nodes in the cluster
+- **Matching Rule**: Includes all worker nodes in the OKE cluster
+
+This dynamic group uses Option A configuration (all OKE worker nodes), which means:
+- Any worker node in the cluster can use Karpenter permissions
+- Simpler to manage but broader permissions scope
+- Suitable for trusted environments
+
+## Applied IAM Policy
+
+The following IAM policy has been created and applied:
+
+### Policy Details
+- **Name**: `karpenter-policy`
+- **OCID**: `ocid1.policy.oc1..aaaaaaaa4ydfyuoenejknpmmrmqziyjqe5bvjlyhhybs52slynw47vzc574q`
+- **Compartment**: `ocid1.compartment.oc1..aaaaaaaalr5oi5mfqpjedsdsyn3vxn2fh2bltqezqrmk4bi7gaq6i245qnkq`
+
+### Policy Statements
 
 ```
-ALL {instance.compartment.id = '<compartment-ocid>', tag.<tag-namespace>.<cluster-tag-key>.value = '<cluster-name>'}
+Allow dynamic-group karpenter-nodes-dg to manage instances in compartment id ocid1.compartment.oc1..aaaaaaaalr5oi5mfqpjedsdsyn3vxn2fh2bltqezqrmk4bi7gaq6i245qnkq
+Allow dynamic-group karpenter-nodes-dg to manage instance-family in compartment id ocid1.compartment.oc1..aaaaaaaalr5oi5mfqpjedsdsyn3vxn2fh2bltqezqrmk4bi7gaq6i245qnkq
+Allow dynamic-group karpenter-nodes-dg to use volume-family in compartment id ocid1.compartment.oc1..aaaaaaaalr5oi5mfqpjedsdsyn3vxn2fh2bltqezqrmk4bi7gaq6i245qnkq
+Allow dynamic-group karpenter-nodes-dg to inspect clusters in compartment id ocid1.compartment.oc1..aaaaaaaalr5oi5mfqpjedsdsyn3vxn2fh2bltqezqrmk4bi7gaq6i245qnkq
+Allow dynamic-group karpenter-nodes-dg to read cluster-node-pools in compartment id ocid1.compartment.oc1..aaaaaaaalr5oi5mfqpjedsdsyn3vxn2fh2bltqezqrmk4bi7gaq6i245qnkq
+Allow dynamic-group karpenter-nodes-dg to read cluster-workload-mappings in compartment id ocid1.compartment.oc1..aaaaaaaalr5oi5mfqpjedsdsyn3vxn2fh2bltqezqrmk4bi7gaq6i245qnkq
+Allow dynamic-group karpenter-nodes-dg to use vnics in compartment id ocid1.compartment.oc1..aaaaaaaalr5oi5mfqpjedsdsyn3vxn2fh2bltqezqrmk4bi7gaq6i245qnkq
+Allow dynamic-group karpenter-nodes-dg to use subnets in compartment id ocid1.compartment.oc1..aaaaaaaalr5oi5mfqpjedsdsyn3vxn2fh2bltqezqrmk4bi7gaq6i245qnkq
 ```
 
-Or more broadly for all OKE nodes:
+### Permission Breakdown
 
+1. **Instance Management**
+   - `manage instances`: Create, update, and terminate individual instances
+   - `manage instance-family`: Full control over instance-related resources including:
+     - Instance configurations
+     - Instance pools
+     - Cluster networks
+     - Instance console connections
+
+2. **Storage**
+   - `use volume-family`: Attach and detach volumes for instances
+
+3. **Cluster Access**
+   - `inspect clusters`: Read cluster metadata and configuration
+   - `read cluster-node-pools`: View existing node pool configurations
+   - `read cluster-workload-mappings`: Access workload mapping information
+
+4. **Networking**
+   - `use vnics`: Create and attach virtual network interfaces
+   - `use subnets`: Launch instances in specified subnets
+
+## Additional Permissions (Optional)
+
+The following permissions were considered but not included due to OCI API limitations:
+- `read shapes`: Not a valid resource type in OCI IAM
+- `read images`: Not a valid resource type in OCI IAM  
+- `manage compute-capacity-reports`: For checking available capacity
+
+These capabilities are inherently available through the instance-family permissions.
+
+## Applying the Policy
+
+The policy has already been applied using the OCI CLI:
+
+```bash
+oci iam policy create \
+  --compartment-id ocid1.compartment.oc1..aaaaaaaalr5oi5mfqpjedsdsyn3vxn2fh2bltqezqrmk4bi7gaq6i245qnkq \
+  --name karpenter-policy \
+  --description "IAM policy for Karpenter controller using existing karpenter-nodes-dg dynamic group" \
+  --statements '[
+    "Allow dynamic-group karpenter-nodes-dg to manage instances in compartment id ocid1.compartment.oc1..aaaaaaaalr5oi5mfqpjedsdsyn3vxn2fh2bltqezqrmk4bi7gaq6i245qnkq",
+    "Allow dynamic-group karpenter-nodes-dg to manage instance-family in compartment id ocid1.compartment.oc1..aaaaaaaalr5oi5mfqpjedsdsyn3vxn2fh2bltqezqrmk4bi7gaq6i245qnkq",
+    "Allow dynamic-group karpenter-nodes-dg to use volume-family in compartment id ocid1.compartment.oc1..aaaaaaaalr5oi5mfqpjedsdsyn3vxn2fh2bltqezqrmk4bi7gaq6i245qnkq",
+    "Allow dynamic-group karpenter-nodes-dg to inspect clusters in compartment id ocid1.compartment.oc1..aaaaaaaalr5oi5mfqpjedsdsyn3vxn2fh2bltqezqrmk4bi7gaq6i245qnkq",
+    "Allow dynamic-group karpenter-nodes-dg to read cluster-node-pools in compartment id ocid1.compartment.oc1..aaaaaaaalr5oi5mfqpjedsdsyn3vxn2fh2bltqezqrmk4bi7gaq6i245qnkq",
+    "Allow dynamic-group karpenter-nodes-dg to read cluster-workload-mappings in compartment id ocid1.compartment.oc1..aaaaaaaalr5oi5mfqpjedsdsyn3vxn2fh2bltqezqrmk4bi7gaq6i245qnkq",
+    "Allow dynamic-group karpenter-nodes-dg to use vnics in compartment id ocid1.compartment.oc1..aaaaaaaalr5oi5mfqpjedsdsyn3vxn2fh2bltqezqrmk4bi7gaq6i245qnkq",
+    "Allow dynamic-group karpenter-nodes-dg to use subnets in compartment id ocid1.compartment.oc1..aaaaaaaalr5oi5mfqpjedsdsyn3vxn2fh2bltqezqrmk4bi7gaq6i245qnkq"
+  ]'
 ```
-ALL {instance.compartment.id = '<compartment-ocid>', tag.oke.cluster.value}
+
+## Verification
+
+To verify the policy is active:
+
+```bash
+# Check the policy
+oci iam policy get --policy-id ocid1.policy.oc1..aaaaaaaa4ydfyuoenejknpmmrmqziyjqe5bvjlyhhybs52slynw47vzc574q
+
+# Check dynamic group membership
+oci iam dynamic-group get --dynamic-group-id ocid1.dynamicgroup.oc1..aaaaaaaanmiqapuxzo3ye2uqp7uzvf7plvftwxvmjhekdrnwcisp46tcplmq
+
+# Test from a node in the cluster
+curl -H "Authorization: Bearer Oracle" http://169.254.169.254/opc/v2/instance/
 ```
 
-### Step 2: Create Policies
+## Alternative: User Principal Authentication
 
-Create the following policies for the dynamic group:
+If instance principal is not available, you can use user principal authentication:
 
-```hcl
-# Policy: karpenter-oke-policy
-Allow dynamic-group <dynamic-group-name> to manage compute-instances in compartment <compartment-name> where request.permission != 'INSTANCE_DELETE'
-Allow dynamic-group <dynamic-group-name> to use vnics in compartment <compartment-name>
-Allow dynamic-group <dynamic-group-name> to use subnets in compartment <compartment-name>
-Allow dynamic-group <dynamic-group-name> to use network-security-groups in compartment <compartment-name>
-Allow dynamic-group <dynamic-group-name> to read virtual-network-family in compartment <compartment-name>
-Allow dynamic-group <dynamic-group-name> to read instance-configurations in compartment <compartment-name>
-Allow dynamic-group <dynamic-group-name> to read cluster-family in compartment <compartment-name>
-Allow dynamic-group <dynamic-group-name> to read compute-capacity-reservations in compartment <compartment-name>
-Allow dynamic-group <dynamic-group-name> to read compute-dedicated-vm-hosts in compartment <compartment-name>
-
-# For instance termination (Karpenter consolidation)
-Allow dynamic-group <dynamic-group-name> to manage instance-family in compartment <compartment-name> where request.operation = 'TerminateInstance'
-
-# For reading images
-Allow dynamic-group <dynamic-group-name> to read compute-images in compartment <compartment-name>
-
-# For managing volumes (if using block storage)
-Allow dynamic-group <dynamic-group-name> to manage volumes in compartment <compartment-name>
-Allow dynamic-group <dynamic-group-name> to manage volume-attachments in compartment <compartment-name>
-```
-
-## Option 2: User Principal
-
-If using user principal authentication, create an IAM user with API keys and apply similar policies:
-
-### Step 1: Create User and Group
-
+### Step 1: Create User and API Key
 ```bash
 # Create group
 oci iam group create --name karpenter-group --description "Group for Karpenter OKE autoscaler"
@@ -60,35 +127,12 @@ oci iam user create --name karpenter-user --description "User for Karpenter OKE 
 
 # Add user to group
 oci iam group add-user --group-id <group-ocid> --user-id <user-ocid>
-```
 
-### Step 2: Create API Key
-
-```bash
-# Generate API key
+# Generate and upload API key
 oci iam user api-key upload --user-id <user-ocid> --key-file <path-to-public-key>
 ```
 
-### Step 3: Create Policies
-
-```hcl
-# Policy: karpenter-user-policy
-Allow group <group-name> to manage compute-instances in compartment <compartment-name>
-Allow group <group-name> to use vnics in compartment <compartment-name>
-Allow group <group-name> to use subnets in compartment <compartment-name>
-Allow group <group-name> to use network-security-groups in compartment <compartment-name>
-Allow group <group-name> to read virtual-network-family in compartment <compartment-name>
-Allow group <group-name> to read instance-configurations in compartment <compartment-name>
-Allow group <group-name> to read cluster-family in compartment <compartment-name>
-Allow group <group-name> to read compute-images in compartment <compartment-name>
-Allow group <group-name> to manage volumes in compartment <compartment-name>
-Allow group <group-name> to manage volume-attachments in compartment <compartment-name>
-```
-
-### Step 4: Create Kubernetes Secret
-
-Create a secret with the OCI configuration:
-
+### Step 2: Create Kubernetes Secret
 ```yaml
 apiVersion: v1
 kind: Secret
@@ -110,75 +154,61 @@ stringData:
     -----END RSA PRIVATE KEY-----
 ```
 
-Then reference this secret in your HelmRelease:
+## Production Considerations
 
-```yaml
-spec:
-  values:
-    oci:
-      existingSecret: "oci-config"
-      existingSecretConfigKey: "config"
-    controller:
-      env:
-        - name: OCI_USE_INSTANCE_PRINCIPAL
-          value: "false"
-```
+For production deployments, consider:
 
-## Required Permissions Summary
+1. **Narrower Dynamic Group Scope**: Create a dedicated dynamic group for Karpenter controller nodes only
+   ```
+   ALL {instance.compartment.id = '<compartment-id>', tag.karpenter-controller.value = 'true'}
+   ```
 
-Karpenter needs the following permissions to function:
+2. **Compartment Isolation**: Use dedicated compartments for Karpenter-managed resources
 
-1. **Compute Instance Management**
-   - Launch instances with flexible shapes
-   - Terminate instances
-   - List and describe instances
+3. **Audit Logging**: Enable OCI audit logs to track instance lifecycle events
 
-2. **Networking**
-   - Attach VNICs to instances
-   - Use subnets and security groups
-   - Read VCN configuration
+4. **Resource Limits**: Implement service limits to prevent runaway provisioning
 
-3. **Storage** (if using block volumes)
-   - Create and attach volumes
-   - Manage boot volumes
-
-4. **OKE Integration**
-   - Read cluster configuration
-   - Read node pool configuration
+5. **Network Isolation**: Use dedicated subnets for Karpenter-provisioned nodes
 
 ## Troubleshooting
 
-### Permission Denied Errors
+### Common Issues
 
-If you see permission errors in Karpenter logs:
+1. **404 NotAuthorizedOrNotFound Error**
+   - Dynamic group doesn't include the Karpenter pod's node
+   - Policies haven't propagated (wait 1-2 minutes)
+   - Incorrect compartment or resource OCIDs
 
-1. Check dynamic group matching rules:
+2. **"No permissions found" Error**
+   - Invalid resource type in policy (e.g., "shapes", "images")
+   - Incorrect verb for resource type
+   - Policy syntax error
+
+3. **Instance Principal Not Working**
    ```bash
-   oci iam dynamic-group get --dynamic-group-id <dynamic-group-ocid>
-   ```
-
-2. Verify policies are attached:
-   ```bash
-   oci iam policy list --compartment-id <compartment-ocid> --name karpenter
-   ```
-
-3. Test permissions with OCI CLI from a node:
-   ```bash
-   # SSH to a node and test
-   oci compute instance list --compartment-id <compartment-ocid>
-   ```
-
-### Instance Principal Not Working
-
-1. Verify instance metadata service is enabled:
-   ```bash
-   curl -H "Authorization: Bearer Oracle" http://169.254.169.254/opc/v2/instance/
-   ```
-
-2. Check if the instance is in the dynamic group:
-   ```bash
-   # Get instance OCID
+   # Test from node
    curl -H "Authorization: Bearer Oracle" http://169.254.169.254/opc/v2/instance/id
    ```
 
-3. Ensure the node has the correct tags for dynamic group matching
+4. **Check Audit Logs**
+   ```bash
+   oci audit event list \
+     --compartment-id <compartment-id> \
+     --start-time 2025-08-02T00:00:00Z \
+     --end-time 2025-08-02T23:59:59Z \
+     --query "data[?contains(data.eventName, 'LaunchInstance')]"
+   ```
+
+## Current Status
+
+✅ Dynamic group exists and includes all OKE worker nodes  
+✅ IAM policy created with necessary permissions  
+✅ Karpenter configured to use instance principal authentication  
+✅ Ready for node provisioning
+
+## References
+
+- [OCI IAM Policy Syntax](https://docs.oracle.com/en-us/iaas/Content/Identity/Concepts/policygetstarted.htm)
+- [OCI Dynamic Groups](https://docs.oracle.com/en-us/iaas/Content/Identity/dynamicgroups/To_create_a_dynamic_group.htm)
+- [OKE Instance Principal](https://docs.oracle.com/en-us/iaas/Content/ContEng/Tasks/contengworkingwithproviderflex.htm)
