@@ -172,14 +172,22 @@ func (c *Client) LaunchInstance(ctx context.Context, nodeClaim *v1.NodeClaim, no
 					MemoryInGBs: common.Float32(float32(memory)),
 				}
 				logger.Info("added shape config for flexible shape", 
-					"ocpus", ocpus, "memory", memory)
+					"shape", shape, "ocpus", ocpus, "memory", memory)
 			}
 		}
 
-		// Log the launch request details
-		logger.Info("sending launch instance request",
+		// Log the launch request details including shape config
+		logFields := []interface{}{
 			"displayName", *request.LaunchInstanceDetails.DisplayName,
-			"subnet", *request.LaunchInstanceDetails.CreateVnicDetails.SubnetId)
+			"subnet", *request.LaunchInstanceDetails.CreateVnicDetails.SubnetId,
+			"shape", shape,
+		}
+		if request.LaunchInstanceDetails.ShapeConfig != nil {
+			logFields = append(logFields,
+				"shapeConfig.ocpus", *request.LaunchInstanceDetails.ShapeConfig.Ocpus,
+				"shapeConfig.memory", *request.LaunchInstanceDetails.ShapeConfig.MemoryInGBs)
+		}
+		logger.Info("sending launch instance request", logFields...)
 
 		// Launch the instance
 		response, err := c.computeClient.LaunchInstance(ctx, request)

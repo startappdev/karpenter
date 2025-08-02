@@ -10,7 +10,7 @@ spec:
     - ocid1.subnet.oc1.iad.aaaaaaaau6uekgrdd446pvmqt3zfhwkpnncn2jytqwlhokurxb54mnh46tca
   
   # OCI Image ID for instances (OKE-OL8 image used by existing nodes)
-  imageId: ocid1.image.oc1.iad.aaaaaaaaug6zsgyvt52ybxifdiitp6ywrudnlbxsaclurlla3zkw4umchbha
+  imageId: ocid1.image.oc1.iad.aaaaaaaaknzkygdhz6n3vmaovv3ouh2sxt7cudrdomefqfxnampnfrtpp6rq
   
   # Default shape if not specified in NodePool
   shape: VM.Standard.E4.Flex
