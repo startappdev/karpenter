@@ -60,16 +60,13 @@ resources:
 
 # -- Node selector for pod scheduling
 nodeSelector:
-  node_pool: generic
+  kubernetes.io/os: linux
+  karpenter.sh/controller: "true"
 
 # -- Tolerations for pod scheduling
 tolerations:
   - key: CriticalAddonsOnly
     operator: Exists
-  - key: node_pool
-    operator: Equal
-    value: generic
-    effect: NoSchedule
 
 # -- Affinity rules for pod scheduling
 affinity:
@@ -105,7 +102,7 @@ readinessProbe:
 # Karpenter settings
 settings:
   # -- Cluster name
-  clusterName: ""
+  clusterName: "oke-ash-stg"
   # -- Log level (info, debug)
   logLevel: info
   # -- Batch max duration for scheduling
@@ -223,3 +220,34 @@ rbac:
 nodePools:
   # -- Enable creation of default NodePools
   enabled: false
+  
+  # Grafana Agent NodePool configuration
+  grafanaAgent:
+    # -- Enable grafana-agent NodePool
+    enabled: true
+    disruption:
+      consolidateAfter: "30s"
+      consolidationPolicy: "WhenEmpty"
+      budgets:
+      - nodes: "10%"
+    limits:
+      cpu: "16"
+    template:
+      metadata:
+        labels: {}
+        annotations: {}
+      spec:
+        expireAfter: "720h"
+        nodeClassRef:
+          name: "default"
+        requirements:
+        - key: kubernetes.io/arch
+          operator: In
+          values:
+          - amd64
+        - key: node.kubernetes.io/instance-type
+          operator: In
+          values:
+          - VM.Standard.E4.Flex-8-32
+          - VM.Standard.E5.Flex-8-32
+        taints: []

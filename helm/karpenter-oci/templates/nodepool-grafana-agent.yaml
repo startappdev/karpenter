@@ -1,0 +1,50 @@
+{{- if and .Values.nodePools.grafanaAgent.enabled }}
+apiVersion: karpenter.sh/v1
+kind: NodePool
+metadata:
+  name: {{ include "karpenter-oci.fullname" . }}-grafana-agent
+  labels:
+    {{- include "karpenter-oci.labels" . | nindent 4 }}
+    {{- with .Values.extraLabels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  disruption:
+    consolidateAfter: {{ .Values.nodePools.grafanaAgent.disruption.consolidateAfter | default "30s" }}
+    consolidationPolicy: {{ .Values.nodePools.grafanaAgent.disruption.consolidationPolicy | default "WhenEmpty" }}
+    {{- with .Values.nodePools.grafanaAgent.disruption.budgets }}
+    budgets:
+      {{- toYaml . | nindent 6 }}
+    {{- end }}
+  {{- with .Values.nodePools.grafanaAgent.limits }}
+  limits:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  template:
+    metadata:
+      labels:
+        node_pool: grafana_agent
+        karpenter-nodepool: grafana-agent
+        {{- with .Values.nodePools.grafanaAgent.template.metadata.labels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- with .Values.nodePools.grafanaAgent.template.metadata.annotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      expireAfter: {{ .Values.nodePools.grafanaAgent.template.spec.expireAfter | default "720h" }}
+      nodeClassRef:
+        group: karpenter.sh
+        kind: OCINodeClass
+        name: {{ .Values.nodePools.grafanaAgent.template.spec.nodeClassRef.name | default "default" }}
+      requirements:
+        {{- toYaml .Values.nodePools.grafanaAgent.template.spec.requirements | nindent 8 }}
+      taints:
+        - key: node_pool
+          value: grafana_agent
+          effect: NoSchedule
+        {{- with .Values.nodePools.grafanaAgent.template.spec.taints }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+{{- end }}
