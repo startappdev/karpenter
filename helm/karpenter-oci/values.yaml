@@ -248,6 +248,10 @@ nodePools:
         - key: node.kubernetes.io/instance-type
           operator: In
           values:
-          - VM.Standard.E4.Flex-8-32
-          - VM.Standard.E5.Flex-8-32
+          - VM.Standard.E4.Flex
+          - VM.Standard.E5.Flex
+        - key: karpenter.sh/capacity-type
+          operator: In
+          values:
+          - on-demand
         taints: []
