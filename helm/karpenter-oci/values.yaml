@@ -245,13 +245,10 @@ nodePools:
           operator: In
           values:
           - amd64
-        - key: node.kubernetes.io/instance-type
+        - key: kubernetes.io/os
           operator: In
           values:
-          - VM.Standard.E4.Flex
-          - VM.Standard.E5.Flex
-        - key: karpenter.sh/capacity-type
-          operator: In
-          values:
-          - on-demand
+          - linux
+        # Remove static instance-type requirements to enable dynamic provisioning
+        # Let Karpenter dynamically select the best flexible shape based on pod requirements
         taints: []
