@@ -13,7 +13,7 @@ jobs:
   build-and-push:
     runs-on: ubuntu-latest
     permissions:
-      contents: read
+      contents: write
       packages: write
 
     steps:
@@ -27,19 +27,41 @@ jobs:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
 
-    - name: Extract metadata
-      id: meta
-      uses: docker/metadata-action@v5
-      with:
-        images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-        tags: |
-          type=ref,event=branch
-          type=sha,prefix={{branch}}-
+    - name: Generate image tag
+      id: tag
+      run: |
+        SHORT_SHA=$(echo "${{ github.sha }}" | cut -c1-8)
+        IMAGE_TAG="start-io-${SHORT_SHA}"
+        echo "IMAGE_TAG=${IMAGE_TAG}" >> $GITHUB_OUTPUT
+        echo "Generated image tag: ${IMAGE_TAG}"
 
     - name: Build and push Docker image
       uses: docker/build-push-action@v5
       with:
         context: .
         push: true
-        tags: ${{ steps.meta.outputs.tags }}
-        labels: ${{ steps.meta.outputs.labels }}
+        tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.tag.outputs.IMAGE_TAG }}
+
+    - name: Update Helm chart
+      run: |
+        # Update values.yaml with new image tag
+        sed -i 's/tag: ".*"/tag: "${{ steps.tag.outputs.IMAGE_TAG }}"/' helm/karpenter-oci/values.yaml
+        
+        # Update Chart.yaml version and appVersion
+        CHART_VERSION=$(grep '^version:' helm/karpenter-oci/Chart.yaml | sed 's/version: //' | sed 's/0\.\([0-9]*\)\.\([0-9]*\)/0.\1.\2/')
+        PATCH_VERSION=$(echo $CHART_VERSION | cut -d. -f3)
+        NEW_PATCH_VERSION=$((PATCH_VERSION + 1))
+        NEW_CHART_VERSION="0.1.${NEW_PATCH_VERSION}"
+        
+        sed -i "s/^version: .*/version: ${NEW_CHART_VERSION}/" helm/karpenter-oci/Chart.yaml
+        sed -i 's/^appVersion: ".*"/appVersion: "${{ steps.tag.outputs.IMAGE_TAG }}"/' helm/karpenter-oci/Chart.yaml
+        
+        echo "Updated chart version to ${NEW_CHART_VERSION} with image tag ${{ steps.tag.outputs.IMAGE_TAG }}"
+
+    - name: Commit and push Helm chart changes
+      run: |
+        git config --local user.email "action@github.com"
+        git config --local user.name "GitHub Action"
+        git add helm/karpenter-oci/values.yaml helm/karpenter-oci/Chart.yaml
+        git commit -m "chore: Update Helm chart to ${{ steps.tag.outputs.IMAGE_TAG }}" || exit 0
+        git push
