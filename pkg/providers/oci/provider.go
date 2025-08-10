@@ -87,6 +87,13 @@ func (p *Provider) Create(ctx context.Context, nodeClaim *v1.NodeClaim) (*v1.Nod
 		return nil, fmt.Errorf("resolving node class from nodeclaim, %w", err)
 	}
 
+	// Retrieve the NodePool to get template labels and taints
+	nodePool, err := p.resolveNodePoolFromNodeClaim(ctx, nodeClaim)
+	if err != nil {
+		logger.Error(err, "failed to resolve NodePool, proceeding without template metadata", "nodeClaim", nodeClaim.Name)
+		nodePool = nil // Continue without NodePool template metadata
+	}
+
 	// Check if NodeClass is ready
 	if status := nodeClass.StatusConditions().Get(status.ConditionReady); status.IsFalse() {
 		return nil, cloudprovider.NewNodeClassNotReadyError(stderrors.New(status.Message))
@@ -106,10 +113,10 @@ func (p *Provider) Create(ctx context.Context, nodeClaim *v1.NodeClaim) (*v1.Nod
 	if isDynamicShape {
 		// Extract shape configuration from instance type name (encoded in the format)
 		shapeConfig := p.parseShapeConfig(instanceType)
-		instance, err = p.client.LaunchFlexibleInstance(ctx, nodeClaim, nodeClass, shapeConfig)
+		instance, err = p.client.LaunchFlexibleInstance(ctx, nodeClaim, nodeClass, nodePool, shapeConfig)
 	} else {
 		// Standard fixed shape instance
-		instance, err = p.client.LaunchInstance(ctx, nodeClaim, nodeClass, instanceType)
+		instance, err = p.client.LaunchInstance(ctx, nodeClaim, nodeClass, nodePool, instanceType)
 	}
 	
 	if err != nil {
@@ -394,4 +401,20 @@ func (p *Provider) resolveNodeClassFromNodeClaim(ctx context.Context, nodeClaim 
 		return nil, err
 	}
 	return nodeClass, nil
+}
+
+// resolveNodePoolFromNodeClaim retrieves the NodePool referenced by the NodeClaim
+func (p *Provider) resolveNodePoolFromNodeClaim(ctx context.Context, nodeClaim *v1.NodeClaim) (*v1.NodePool, error) {
+	// NodePool name is stored in the nodeclaim labels
+	nodePoolName, ok := nodeClaim.Labels[v1.NodePoolLabelKey]
+	if !ok {
+		return nil, fmt.Errorf("nodeClaim %s missing NodePool label %s", nodeClaim.Name, v1.NodePoolLabelKey)
+	}
+	
+	nodePool := &v1.NodePool{}
+	if err := p.kubeClient.Get(ctx, types.NamespacedName{Name: nodePoolName}, nodePool); err != nil {
+		return nil, fmt.Errorf("getting NodePool %s: %w", nodePoolName, err)
+	}
+	
+	return nodePool, nil
 }

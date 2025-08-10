@@ -143,7 +143,7 @@ func NewClient(config *Config) (*Client, error) {
 }
 
 // LaunchInstance launches a standard instance with fixed shape
-func (c *Client) LaunchInstance(ctx context.Context, nodeClaim *v1.NodeClaim, nodeClass *v1alpha1.OCINodeClass, shape string) (*Instance, error) {
+func (c *Client) LaunchInstance(ctx context.Context, nodeClaim *v1.NodeClaim, nodeClass *v1alpha1.OCINodeClass, nodePool *v1.NodePool, shape string) (*Instance, error) {
 	logger := log.FromContext(ctx)
 	logger.Info("launching OCI instance", 
 		"shape", shape,
@@ -184,7 +184,7 @@ func (c *Client) LaunchInstance(ctx context.Context, nodeClaim *v1.NodeClaim, no
 				},
 				
 				// Metadata including cloud-init user_data
-				Metadata:     c.buildMetadata(nodeClaim),
+				Metadata:     c.buildMetadata(nodeClaim, nodePool),
 				FreeformTags: c.buildFreeformTags(nodeClaim),
 				DefinedTags:  c.buildDefinedTags(nodeClaim),
 			},
@@ -278,7 +278,7 @@ func (c *Client) LaunchInstance(ctx context.Context, nodeClaim *v1.NodeClaim, no
 }
 
 // LaunchFlexibleInstance launches a flexible shape instance with custom CPU/memory
-func (c *Client) LaunchFlexibleInstance(ctx context.Context, nodeClaim *v1.NodeClaim, nodeClass *v1alpha1.OCINodeClass, shapeConfig *ShapeConfig) (*Instance, error) {
+func (c *Client) LaunchFlexibleInstance(ctx context.Context, nodeClaim *v1.NodeClaim, nodeClass *v1alpha1.OCINodeClass, nodePool *v1.NodePool, shapeConfig *ShapeConfig) (*Instance, error) {
 	logger := log.FromContext(ctx)
 	
 	// Determine shape family from NodePool configuration
@@ -327,7 +327,7 @@ func (c *Client) LaunchFlexibleInstance(ctx context.Context, nodeClaim *v1.NodeC
 				},
 				
 				// Metadata including cloud-init user_data
-				Metadata:     c.buildMetadata(nodeClaim),
+				Metadata:     c.buildMetadata(nodeClaim, nodePool),
 				FreeformTags: c.buildFreeformTags(nodeClaim),
 				DefinedTags:  c.buildDefinedTags(nodeClaim),
 			},
@@ -830,7 +830,46 @@ func (c *Client) shouldUsePreemptible(nodeClaim *v1.NodeClaim) bool {
 	return false
 }
 
-func (c *Client) buildMetadata(nodeClaim *v1.NodeClaim) map[string]string {
+// buildNodeLabelsArgs creates the kubelet node-labels argument from NodePool template and Karpenter labels
+func (c *Client) buildNodeLabelsArgs(nodeClaim *v1.NodeClaim, nodePool *v1.NodePool) string {
+	// Start with basic Karpenter labels
+	labels := []string{
+		fmt.Sprintf("karpenter.sh/nodeclaim=%s", nodeClaim.Name),
+		fmt.Sprintf("karpenter.sh/nodepool=%s", nodeClaim.Labels[v1.NodePoolLabelKey]),
+		"karpenter.sh/managed=true",
+	}
+	
+	// Add NodePool template labels if NodePool is available
+	if nodePool != nil && nodePool.Spec.Template.ObjectMeta.Labels != nil {
+		for k, v := range nodePool.Spec.Template.ObjectMeta.Labels {
+			// Keep label keys as-is for Kubernetes node labels
+			labels = append(labels, fmt.Sprintf("%s=%s", k, v))
+		}
+	}
+	
+	return strings.Join(labels, ",")
+}
+
+// buildNodeTaintsArgs creates the kubelet register-with-taints argument from NodePool template taints
+func (c *Client) buildNodeTaintsArgs(nodePool *v1.NodePool) string {
+	if nodePool == nil || nodePool.Spec.Template.Spec.Taints == nil {
+		return ""
+	}
+	
+	var taints []string
+	for _, taint := range nodePool.Spec.Template.Spec.Taints {
+		// Format: key=value:effect
+		taintStr := fmt.Sprintf("%s=%s:%s", taint.Key, taint.Value, taint.Effect)
+		taints = append(taints, taintStr)
+	}
+	
+	if len(taints) > 0 {
+		return fmt.Sprintf(" --register-with-taints=%s", strings.Join(taints, ","))
+	}
+	return ""
+}
+
+func (c *Client) buildMetadata(nodeClaim *v1.NodeClaim, nodePool *v1.NodePool) map[string]string {
 	logger := log.Log.WithValues("nodeClaim", nodeClaim.Name)
 	metadata := make(map[string]string)
 	
@@ -937,6 +976,10 @@ fi
 		}
 	}
 	
+	// Build node labels and taints from NodePool template
+	nodeLabelsArgs := c.buildNodeLabelsArgs(nodeClaim, nodePool)
+	nodeTaintsArgs := c.buildNodeTaintsArgs(nodePool)
+	
 	// Create OKE bootstrap script for self-managed nodes
 	cloudInitScript := fmt.Sprintf(`#!/bin/bash
 # OKE Node Bootstrap Script for Karpenter
@@ -963,7 +1006,7 @@ if [ -f /etc/oke/oke-install.sh ]; then
     bash /etc/oke/oke-install.sh \
         --apiserver-endpoint "$ENDPOINT_NO_PORT" \
         --kubelet-ca-cert "%s" \
-        --kubelet-extra-args "--cloud-provider=external --node-labels=karpenter.sh/nodeclaim=%s,karpenter.sh/nodepool=%s,karpenter.sh/managed=true"
+        --kubelet-extra-args "--cloud-provider=external --node-labels=%s%s"
 else
     # Fallback: Try the default OKE metadata approach
     echo "oke-install.sh not found, trying metadata approach"
@@ -977,7 +1020,7 @@ else
 fi
 
 echo "OKE node bootstrap completed"
-`, c.config.ClusterID, clusterEndpoint, caCertData, nodeClaim.Name, nodeClaim.Labels[v1.NodePoolLabelKey])
+`, c.config.ClusterID, clusterEndpoint, caCertData, nodeLabelsArgs, nodeTaintsArgs)
 	
 	// In OCI, user_data must be base64-encoded
 	encodedScript := base64.StdEncoding.EncodeToString([]byte(cloudInitScript))
