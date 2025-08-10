@@ -11,7 +11,7 @@ image:
   # -- Image pull policy
   pullPolicy: IfNotPresent
   # -- Image tag override (defaults to chart appVersion if not set)
-  tag: "start-io-7478bda2"
+  tag: "start-io-4588fed"
 
 # -- Image pull secrets for private registries
 imagePullSecrets:
