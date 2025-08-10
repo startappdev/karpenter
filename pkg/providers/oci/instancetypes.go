@@ -261,23 +261,27 @@ func (p *InstanceTypeProvider) calculateMemoryGB(memory resource.Quantity) int32
 func (p *InstanceTypeProvider) createOfferings(shape string, ocpus float32, memoryGB float32, isFlexible bool) []*cloudprovider.Offering {
 	var offerings []*cloudprovider.Offering
 	
+	// Get available zones from OCI availability domains
+	// For OCI, we use all three availability domains in us-ashburn-1 region
+	availableZones := []string{"US-ASHBURN-AD-1", "US-ASHBURN-AD-2", "US-ASHBURN-AD-3"}
+	
 	// On-demand offering
 	onDemandPrice, _ := p.pricingProvider.GetShapePrice(context.Background(), shape, int32(ocpus), int32(memoryGB), false)
 	offerings = append(offerings, &cloudprovider.Offering{
 		Requirements: scheduling.NewRequirements(
 			scheduling.NewRequirement(v1.CapacityTypeLabelKey, corev1.NodeSelectorOpIn, v1.CapacityTypeOnDemand),
-			scheduling.NewRequirement(corev1.LabelTopologyZone, corev1.NodeSelectorOpIn, "zone-1", "zone-2", "zone-3"),
+			scheduling.NewRequirement(corev1.LabelTopologyZone, corev1.NodeSelectorOpIn, availableZones...),
 		),
 		Price:     onDemandPrice,
 		Available: true,
 	})
 	
-	// Preemptible offering
+	// Preemptible offering (spot-equivalent)
 	preemptiblePrice, _ := p.pricingProvider.GetShapePrice(context.Background(), shape, int32(ocpus), int32(memoryGB), true)
 	offerings = append(offerings, &cloudprovider.Offering{
 		Requirements: scheduling.NewRequirements(
-			scheduling.NewRequirement(v1.CapacityTypeLabelKey, corev1.NodeSelectorOpIn, "preemptible"),
-			scheduling.NewRequirement(corev1.LabelTopologyZone, corev1.NodeSelectorOpIn, "zone-1", "zone-2", "zone-3"),
+			scheduling.NewRequirement(v1.CapacityTypeLabelKey, corev1.NodeSelectorOpIn, v1.CapacityTypeSpot),
+			scheduling.NewRequirement(corev1.LabelTopologyZone, corev1.NodeSelectorOpIn, availableZones...),
 		),
 		Price:     preemptiblePrice,
 		Available: true,
@@ -547,21 +551,13 @@ func (p *InstanceTypeProvider) getReservedResources(overhead *v1.SystemOverhead,
 	return result
 }
 
-// generateFlexibleInstanceTypes generates common configurations for flexible shapes
+// generateFlexibleInstanceTypes generates configurations for flexible shapes
 func (p *InstanceTypeProvider) generateFlexibleInstanceTypes(shape *Shape) []*cloudprovider.InstanceType {
 	var instanceTypes []*cloudprovider.InstanceType
 	
-	// Common flexible shape configurations
-	configs := []struct {
-		ocpus    int32
-		memoryGB int32
-	}{
-		{1, 16},   // 1 OCPU, 16GB RAM
-		{2, 32},   // 2 OCPUs, 32GB RAM
-		{4, 64},   // 4 OCPUs, 64GB RAM
-		{8, 128},  // 8 OCPUs, 128GB RAM
-		{16, 256}, // 16 OCPUs, 256GB RAM
-	}
+	// Generate a comprehensive range of flexible shape configurations
+	// to cover various workload patterns including the 5 CPU + 30GB requirement
+	configs := p.generateFlexibleConfigurations(shape)
 	
 	for _, config := range configs {
 		// Skip configurations that exceed shape limits
@@ -616,4 +612,83 @@ func (p *InstanceTypeProvider) generateFlexibleInstanceTypes(shape *Shape) []*cl
 	}
 	
 	return instanceTypes
+}
+
+// generateFlexibleConfigurations creates a comprehensive set of OCPU/Memory combinations
+// to support various workload patterns including exact requirements for pods
+func (p *InstanceTypeProvider) generateFlexibleConfigurations(shape *Shape) []struct {
+	ocpus    int32
+	memoryGB int32
+} {
+	var configs []struct {
+		ocpus    int32
+		memoryGB int32
+	}
+
+	// Define min and max constraints
+	minOCPUs := int32(1)
+	maxOCPUs := int32(120)
+	
+	if shape.OCPUOptions != nil {
+		if shape.OCPUOptions.Min > 0 {
+			minOCPUs = int32(shape.OCPUOptions.Min)
+		}
+		if shape.OCPUOptions.Max > 0 && shape.OCPUOptions.Max < 120 {
+			maxOCPUs = int32(shape.OCPUOptions.Max)
+		}
+	}
+
+	// Memory per OCPU ratios for different workload types
+	memoryRatios := []int32{
+		4,  // Memory optimized: 4 GB per OCPU (typical for databases)
+		6,  // Balanced: 6 GB per OCPU (for grafana-agent type workloads)
+		8,  // Standard: 8 GB per OCPU (general purpose)
+		16, // High memory: 16 GB per OCPU (memory intensive)
+	}
+
+	// Generate configurations for common OCPU counts
+	ocpuSizes := []int32{}
+	
+	// Small sizes (1-8 OCPUs)
+	for i := minOCPUs; i <= min(8, maxOCPUs); i++ {
+		ocpuSizes = append(ocpuSizes, i)
+	}
+	
+	// Medium sizes (10, 12, 16, 20)
+	for _, size := range []int32{10, 12, 16, 20} {
+		if size >= minOCPUs && size <= maxOCPUs {
+			ocpuSizes = append(ocpuSizes, size)
+		}
+	}
+	
+	// Large sizes (24, 32, 48, 64)  
+	for _, size := range []int32{24, 32, 48, 64} {
+		if size >= minOCPUs && size <= maxOCPUs {
+			ocpuSizes = append(ocpuSizes, size)
+		}
+	}
+
+	// Generate combinations
+	for _, ocpus := range ocpuSizes {
+		for _, ratio := range memoryRatios {
+			memoryGB := ocpus * ratio
+			
+			// Apply memory constraints if available
+			if shape.MemoryOptions != nil {
+				if float32(memoryGB) < shape.MemoryOptions.MinInGBs {
+					memoryGB = int32(shape.MemoryOptions.MinInGBs)
+				}
+				if float32(memoryGB) > shape.MemoryOptions.MaxInGBs {
+					continue // Skip if over the limit
+				}
+			}
+			
+			configs = append(configs, struct {
+				ocpus    int32
+				memoryGB int32
+			}{ocpus, memoryGB})
+		}
+	}
+
+	return configs
 }

@@ -198,12 +198,8 @@ func (p *Provider) List(ctx context.Context) ([]*v1.NodeClaim, error) {
 
 // GetInstanceTypes returns instance types available for the given NodePool
 func (p *Provider) GetInstanceTypes(ctx context.Context, nodePool *v1.NodePool) ([]*cloudprovider.InstanceType, error) {
-	// Check if dynamic provisioning is enabled
-	if nodePool.Spec.DynamicProvisioning != nil && nodePool.Spec.DynamicProvisioning.Enabled {
-		return p.getDynamicInstanceTypes(ctx, nodePool)
-	}
-
-	// Return static instance types
+	// For OCI provider, we default to dynamic provisioning with flexible shapes
+	// unless explicitly configured otherwise
 	return p.getStaticInstanceTypes(ctx, nodePool)
 }
 
