@@ -72,7 +72,7 @@ func (p *InstanceTypeProvider) GetStaticInstanceTypes(ctx context.Context, nodeP
 	return instanceTypes, nil
 }
 
-// isAllowedShape filters out expensive shape families to prefer cost-effective shapes
+// isAllowedShape filters out expensive shape families and incompatible architectures
 func (p *InstanceTypeProvider) isAllowedShape(shapeName string) bool {
 	// Block expensive shape families (both fixed and flexible) for cost optimization
 	expensiveShapePrefixes := []string{
@@ -89,7 +89,18 @@ func (p *InstanceTypeProvider) isAllowedShape(shapeName string) bool {
 		}
 	}
 	
-	// Only allow basic Standard shape families (VM.Standard.E4.Flex, VM.Standard.E5.Flex, etc.)
+	// Block ARM-based shapes that are incompatible with x86 images
+	armShapes := []string{
+		"VM.Standard.A1",    // ARM-based Ampere A1 shapes (not compatible with x86 images)
+	}
+	
+	for _, armShape := range armShapes {
+		if strings.HasPrefix(shapeName, armShape) {
+			return false
+		}
+	}
+	
+	// Only allow x86-compatible Standard shape families (VM.Standard.E4.Flex, VM.Standard.E5.Flex, etc.)
 	return strings.HasPrefix(shapeName, "VM.Standard")
 }
 
