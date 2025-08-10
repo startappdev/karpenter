@@ -54,27 +54,29 @@ func (p *InstanceTypeProvider) GetStaticInstanceTypes(ctx context.Context, nodeP
 	var instanceTypes []*cloudprovider.InstanceType
 	
 	for _, shape := range shapes {
+		// Skip expensive shape families for both flexible and fixed shapes  
+		if !p.isAllowedShape(shape.Name) {
+			continue
+		}
+		
 		if shape.IsFlexible {
-			// For flexible shapes, generate a few standard configurations
+			// For allowed flexible shapes, generate a few standard configurations
 			instanceTypes = append(instanceTypes, p.generateFlexibleInstanceTypes(shape)...)
 		} else {
-			// Skip expensive fixed shapes like DenseIO, Optimized, etc.
-			// Only allow basic Standard shapes for cost optimization
-			if p.isAllowedFixedShape(shape.Name) {
-				instanceType := p.shapeToInstanceType(shape)
-				instanceTypes = append(instanceTypes, instanceType)
-			}
+			// For allowed fixed shapes, create a single instance type
+			instanceType := p.shapeToInstanceType(shape)
+			instanceTypes = append(instanceTypes, instanceType)
 		}
 	}
 	
 	return instanceTypes, nil
 }
 
-// isAllowedFixedShape filters out expensive fixed shapes to prefer cost-effective flexible shapes
-func (p *InstanceTypeProvider) isAllowedFixedShape(shapeName string) bool {
-	// Block expensive shape families to force use of flexible shapes for cost optimization
+// isAllowedShape filters out expensive shape families to prefer cost-effective shapes
+func (p *InstanceTypeProvider) isAllowedShape(shapeName string) bool {
+	// Block expensive shape families (both fixed and flexible) for cost optimization
 	expensiveShapePrefixes := []string{
-		"VM.DenseIO",        // High-performance I/O, very expensive
+		"VM.DenseIO",        // High-performance I/O, very expensive (includes VM.DenseIO.E4.Flex)
 		"VM.Optimized",      // CPU/Memory optimized, expensive  
 		"VM.GPU",            // GPU instances, very expensive
 		"VM.HPC",            // High Performance Computing, expensive
@@ -87,7 +89,7 @@ func (p *InstanceTypeProvider) isAllowedFixedShape(shapeName string) bool {
 		}
 	}
 	
-	// Only allow basic Standard shapes, but prefer flexible versions
+	// Only allow basic Standard shape families (VM.Standard.E4.Flex, VM.Standard.E5.Flex, etc.)
 	return strings.HasPrefix(shapeName, "VM.Standard")
 }
 
