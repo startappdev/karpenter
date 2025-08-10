@@ -385,7 +385,8 @@ func (c *Client) TerminateInstance(ctx context.Context, instanceID string) error
 	logger := log.FromContext(ctx)
 	logger.Info("terminating OCI instance", "instanceID", instanceID)
 
-	return WithRetry(ctx, DefaultRetryConfig(), "terminate-instance", func() error {
+	// First attempt with default retry config
+	err := WithRetry(ctx, DefaultRetryConfig(), "terminate-instance", func() error {
 		request := core.TerminateInstanceRequest{
 			InstanceId:         &instanceID,
 			PreserveBootVolume: common.Bool(false),
@@ -398,6 +399,28 @@ func (c *Client) TerminateInstance(ctx context.Context, instanceID string) error
 
 		return nil
 	})
+
+	// If first attempt failed with rate limiting, retry with more aggressive backoff
+	if err != nil && IsRateLimitError(err) {
+		logger.Info("initial terminate attempt hit rate limit, retrying with extended backoff", 
+			"instanceID", instanceID, "error", err)
+			
+		return WithRetry(ctx, RateLimitRetryConfig(), "terminate-instance-rate-limited", func() error {
+			request := core.TerminateInstanceRequest{
+				InstanceId:         &instanceID,
+				PreserveBootVolume: common.Bool(false),
+			}
+
+			_, err := c.computeClient.TerminateInstance(ctx, request)
+			if err != nil {
+				return WrapOCIError(err, "instance")
+			}
+
+			return nil
+		})
+	}
+
+	return err
 }
 
 // GetInstance retrieves instance details

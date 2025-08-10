@@ -55,6 +55,16 @@ func DefaultRetryConfig() RetryConfig {
 	}
 }
 
+// RateLimitRetryConfig returns a retry configuration optimized for rate limiting scenarios
+func RateLimitRetryConfig() RetryConfig {
+	return RetryConfig{
+		MaxAttempts:  8,                // More attempts for rate limiting
+		InitialDelay: 2 * time.Second,  // Start with longer delay
+		MaxDelay:     120 * time.Second, // Much longer max delay for severe rate limiting
+		Factor:       2.5,              // More aggressive backoff
+	}
+}
+
 // WithRetry executes a function with exponential backoff retry
 func WithRetry(ctx context.Context, config RetryConfig, operation string, fn func() error) error {
 	logger := log.FromContext(ctx)
@@ -136,8 +146,10 @@ func isRetryableError(err error) bool {
 			"connection refused",
 			"temporary failure",
 			"too many requests",
+			"TooManyRequests",
 			"rate limit",
 			"throttled",
+			"429",
 		}
 		
 		for _, pattern := range retryablePatterns {
