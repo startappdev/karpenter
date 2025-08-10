@@ -57,13 +57,37 @@ func (p *InstanceTypeProvider) GetStaticInstanceTypes(ctx context.Context, nodeP
 			// For flexible shapes, generate a few standard configurations
 			instanceTypes = append(instanceTypes, p.generateFlexibleInstanceTypes(shape)...)
 		} else {
-			// For fixed shapes, create a single instance type
-			instanceType := p.shapeToInstanceType(shape)
-			instanceTypes = append(instanceTypes, instanceType)
+			// Skip expensive fixed shapes like DenseIO, Optimized, etc.
+			// Only allow basic Standard shapes for cost optimization
+			if p.isAllowedFixedShape(shape.Name) {
+				instanceType := p.shapeToInstanceType(shape)
+				instanceTypes = append(instanceTypes, instanceType)
+			}
 		}
 	}
 	
 	return instanceTypes, nil
+}
+
+// isAllowedFixedShape filters out expensive fixed shapes to prefer cost-effective flexible shapes
+func (p *InstanceTypeProvider) isAllowedFixedShape(shapeName string) bool {
+	// Block expensive shape families to force use of flexible shapes for cost optimization
+	expensiveShapePrefixes := []string{
+		"VM.DenseIO",        // High-performance I/O, very expensive
+		"VM.Optimized",      // CPU/Memory optimized, expensive  
+		"VM.GPU",            // GPU instances, very expensive
+		"VM.HPC",            // High Performance Computing, expensive
+		"BM.",               // Bare Metal, very expensive
+	}
+	
+	for _, prefix := range expensiveShapePrefixes {
+		if strings.HasPrefix(shapeName, prefix) {
+			return false
+		}
+	}
+	
+	// Only allow basic Standard shapes, but prefer flexible versions
+	return strings.HasPrefix(shapeName, "VM.Standard")
 }
 
 // GetDynamicInstanceTypes generates instance types based on pod requirements and NodePool configuration
@@ -642,8 +666,9 @@ func (p *InstanceTypeProvider) generateFlexibleConfigurations(shape *Shape) []st
 	// Memory per OCPU ratios for different workload types
 	memoryRatios := []int32{
 		4,  // Memory optimized: 4 GB per OCPU (typical for databases)
-		6,  // Balanced: 6 GB per OCPU (for grafana-agent type workloads)
+		6,  // Balanced: 6 GB per OCPU
 		8,  // Standard: 8 GB per OCPU (general purpose)
+		10, // Memory balanced: 10 GB per OCPU (for grafana-agent: 3 OCPUs × 10GB = 30GB)
 		16, // High memory: 16 GB per OCPU (memory intensive)
 	}
 
