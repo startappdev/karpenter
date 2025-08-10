@@ -198,9 +198,8 @@ func (p *Provider) List(ctx context.Context) ([]*v1.NodeClaim, error) {
 
 // GetInstanceTypes returns instance types available for the given NodePool
 func (p *Provider) GetInstanceTypes(ctx context.Context, nodePool *v1.NodePool) ([]*cloudprovider.InstanceType, error) {
-	// For OCI provider, we default to dynamic provisioning with flexible shapes
-	// unless explicitly configured otherwise
-	return p.getStaticInstanceTypes(ctx, nodePool)
+	// Use the InstanceTypeProvider for dynamic flexible shape provisioning
+	return p.instanceTypeProvider.GetStaticInstanceTypes(ctx, nodePool)
 }
 
 // IsDrifted returns whether a NodeClaim has drifted from its requirements
