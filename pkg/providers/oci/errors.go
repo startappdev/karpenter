@@ -249,3 +249,17 @@ func extractResourceID(errMsg string) string {
 	// Simple extraction - in real implementation would be more sophisticated
 	return "unknown"
 }
+
+// IsRateLimitError checks if an error is due to rate limiting
+func IsRateLimitError(err error) bool {
+	if err == nil {
+		return false
+	}
+	
+	errMsg := err.Error()
+	return contains(errMsg, "TooManyRequests") || 
+		   contains(errMsg, "429") || 
+		   contains(errMsg, "rate limit") || 
+		   contains(errMsg, "throttled") ||
+		   contains(errMsg, "too many requests")
+}

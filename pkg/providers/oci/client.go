@@ -23,6 +23,7 @@ import (
 	"io"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/oracle/oci-go-sdk/v65/common"
@@ -38,12 +39,33 @@ import (
 	"sigs.k8s.io/karpenter/pkg/providers/oci/apis/v1alpha1"
 )
 
+// AvailabilityDomainCache caches availability domains to avoid repeated API calls
+type AvailabilityDomainCache struct {
+	domains   []string
+	lastFetch time.Time
+	mutex     sync.RWMutex
+	ttl       time.Duration
+}
+
 // Client wraps OCI API operations
 type Client struct {
 	config               *Config
 	computeClient        core.ComputeClient
 	containerEngineClient containerengine.ContainerEngineClient
 	configProvider       common.ConfigurationProvider
+	adCache              *AvailabilityDomainCache
+	requestDeduplicator  *RequestDeduplicator
+}
+
+// RequestDeduplicator prevents concurrent identical requests
+type RequestDeduplicator struct {
+	inflight map[string]chan result
+	mutex    sync.Mutex
+}
+
+type result struct {
+	value []string
+	err   error
 }
 
 // NewClient creates a new OCI client
@@ -111,6 +133,12 @@ func NewClient(config *Config) (*Client, error) {
 		computeClient:        computeClient,
 		containerEngineClient: containerEngineClient,
 		configProvider:       configProvider,
+		adCache: &AvailabilityDomainCache{
+			ttl: 1 * time.Hour, // Cache ADs for 1 hour since they rarely change
+		},
+		requestDeduplicator: &RequestDeduplicator{
+			inflight: make(map[string]chan result),
+		},
 	}, nil
 }
 
@@ -631,31 +659,136 @@ func (c *Client) CreateClusterKubeconfig(ctx context.Context) (string, error) {
 
 // Helper methods
 
-// getAvailabilityDomain gets the first available availability domain
+// getAvailabilityDomain gets the first available availability domain with caching and deduplication
 func (c *Client) getAvailabilityDomain(ctx context.Context) (string, error) {
-	request := identity.ListAvailabilityDomainsRequest{
-		CompartmentId: &c.config.CompartmentID,
+	logger := log.FromContext(ctx)
+	
+	// Try cache first
+	c.adCache.mutex.RLock()
+	if len(c.adCache.domains) > 0 && time.Since(c.adCache.lastFetch) < c.adCache.ttl {
+		domain := c.adCache.domains[0]
+		c.adCache.mutex.RUnlock()
+		logger.V(1).Info("using cached availability domain", "domain", domain)
+		return domain, nil
 	}
+	c.adCache.mutex.RUnlock()
 
-	// We need to create an identity client for this
-	identityClient, err := identity.NewIdentityClientWithConfigurationProvider(c.configProvider)
+	// Cache expired or empty, fetch new data with deduplication
+	domains, err := c.getAvailabilityDomainsWithDeduplication(ctx)
 	if err != nil {
-		return "", fmt.Errorf("creating identity client: %w", err)
-	}
-	// Note: IdentityClient doesn't have a Close method in the OCI SDK
-
-	response, err := identityClient.ListAvailabilityDomains(ctx, request)
-	if err != nil {
-		return "", WrapOCIError(err, "availability domains")
+		return "", err
 	}
 
-	if len(response.Items) == 0 {
+	if len(domains) == 0 {
 		return "", fmt.Errorf("no availability domains found")
 	}
 
 	// For now, return the first AD. In production, this should be more sophisticated
 	// based on capacity, spread, and fault domain distribution
-	return *response.Items[0].Name, nil
+	return domains[0], nil
+}
+
+// getAvailabilityDomainsWithDeduplication fetches availability domains with request deduplication
+func (c *Client) getAvailabilityDomainsWithDeduplication(ctx context.Context) ([]string, error) {
+	logger := log.FromContext(ctx)
+	key := fmt.Sprintf("ad-%s", c.config.CompartmentID)
+
+	c.requestDeduplicator.mutex.Lock()
+	if ch, exists := c.requestDeduplicator.inflight[key]; exists {
+		// Another request is in flight, wait for it
+		c.requestDeduplicator.mutex.Unlock()
+		logger.V(1).Info("waiting for inflight availability domain request")
+		select {
+		case res := <-ch:
+			return res.value, res.err
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		}
+	}
+
+	// No inflight request, start new one
+	ch := make(chan result, 1)
+	c.requestDeduplicator.inflight[key] = ch
+	c.requestDeduplicator.mutex.Unlock()
+
+	// Clean up when done
+	defer func() {
+		c.requestDeduplicator.mutex.Lock()
+		delete(c.requestDeduplicator.inflight, key)
+		c.requestDeduplicator.mutex.Unlock()
+	}()
+
+	logger.V(1).Info("fetching availability domains from OCI API")
+	domains, err := c.fetchAvailabilityDomainsFromAPI(ctx)
+	
+	// Send result to all waiters
+	res := result{value: domains, err: err}
+	select {
+	case ch <- res:
+	default:
+	}
+
+	if err == nil && len(domains) > 0 {
+		// Update cache
+		c.adCache.mutex.Lock()
+		c.adCache.domains = domains
+		c.adCache.lastFetch = time.Now()
+		c.adCache.mutex.Unlock()
+		logger.Info("cached availability domains", "count", len(domains), "domains", domains)
+	}
+
+	return domains, err
+}
+
+// fetchAvailabilityDomainsFromAPI makes the actual API call to OCI
+func (c *Client) fetchAvailabilityDomainsFromAPI(ctx context.Context) ([]string, error) {
+	logger := log.FromContext(ctx)
+	
+	request := identity.ListAvailabilityDomainsRequest{
+		CompartmentId: &c.config.CompartmentID,
+	}
+
+	// Create identity client
+	identityClient, err := identity.NewIdentityClientWithConfigurationProvider(c.configProvider)
+	if err != nil {
+		return nil, fmt.Errorf("creating identity client: %w", err)
+	}
+
+	// Add exponential backoff for rate limiting
+	var domains []string
+	err = wait.ExponentialBackoff(wait.Backoff{
+		Duration: 1 * time.Second,
+		Factor:   2.0,
+		Jitter:   0.1,
+		Steps:    5,
+		Cap:      30 * time.Second,
+	}, func() (bool, error) {
+		response, apiErr := identityClient.ListAvailabilityDomains(ctx, request)
+		if apiErr != nil {
+			wrappedErr := WrapOCIError(apiErr, "availability domains")
+			if IsRateLimitError(wrappedErr) {
+				logger.V(1).Info("rate limited on availability domains API, retrying", "error", apiErr)
+				return false, nil // Retry
+			}
+			return false, wrappedErr // Don't retry on other errors
+		}
+
+		// Success - extract domain names
+		for _, item := range response.Items {
+			if item.Name != nil {
+				domains = append(domains, *item.Name)
+			}
+		}
+		return true, nil
+	})
+
+	if err != nil {
+		logger.Error(err, "failed to fetch availability domains after retries")
+		return nil, err
+	}
+
+	logger.Info("successfully fetched availability domains", "count", len(domains))
+	return domains, nil
 }
 
 func (c *Client) selectAvailabilityDomain() string {
