@@ -615,6 +615,7 @@ func (p *InstanceTypeProvider) generateFlexibleInstanceTypes(shape *Shape) []*cl
 }
 
 // generateFlexibleConfigurations creates a comprehensive set of OCPU/Memory combinations
+// for dynamic provisioning based on pod resource requirements
 // to support various workload patterns including exact requirements for pods
 func (p *InstanceTypeProvider) generateFlexibleConfigurations(shape *Shape) []struct {
 	ocpus    int32
