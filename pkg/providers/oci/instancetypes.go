@@ -101,8 +101,19 @@ func (p *InstanceTypeProvider) isAllowedShape(shapeName string) bool {
 		}
 	}
 	
-	// Only allow x86-compatible Standard shape families (VM.Standard.E4.Flex, VM.Standard.E5.Flex, etc.)
-	return strings.HasPrefix(shapeName, "VM.Standard")
+	// Only allow specific cost-effective flexible shapes that can be right-sized
+	allowedShapes := []string{
+		"VM.Standard.E4.Flex",  // x86 flexible shape - can be sized exactly for workload
+		"VM.Standard.E5.Flex",  // x86 flexible shape - can be sized exactly for workload
+	}
+	
+	for _, allowedShape := range allowedShapes {
+		if strings.HasPrefix(shapeName, allowedShape) {
+			return true
+		}
+	}
+	
+	return false
 }
 
 // GetDynamicInstanceTypes generates instance types based on pod requirements and NodePool configuration
