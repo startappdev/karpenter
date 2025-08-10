@@ -234,7 +234,8 @@ nodePools:
       cpu: "32"
     template:
       metadata:
-        labels: {}
+        labels:
+          node_pool: grafana_agent
         annotations: {}
       spec:
         expireAfter: "720h"
