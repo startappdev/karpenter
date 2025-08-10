@@ -92,6 +92,7 @@ func (p *InstanceTypeProvider) isAllowedShape(shapeName string) bool {
 	// Block ARM-based shapes that are incompatible with x86 images
 	armShapes := []string{
 		"VM.Standard.A1",    // ARM-based Ampere A1 shapes (not compatible with x86 images)
+		"VM.Standard.A2",    // ARM-based Ampere A2 shapes (not compatible with x86 images)
 	}
 	
 	for _, armShape := range armShapes {
