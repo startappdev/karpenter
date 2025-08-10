@@ -2,8 +2,8 @@ apiVersion: v2
 name: karpenter-oci
 description: Karpenter with OCI provider support for Oracle Kubernetes Engine (OKE)
 type: application
-version: 0.1.26
-appVersion: "start-io-4588fed"
+version: 0.1.25
+appVersion: "start-io-7478bda2"
 home: https://github.com/startappdev/karpenter
 sources:
   - https://github.com/startappdev/karpenter
