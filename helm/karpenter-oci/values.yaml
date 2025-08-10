@@ -231,7 +231,7 @@ nodePools:
       budgets:
       - nodes: "10%"
     limits:
-      cpu: "16"
+      cpu: "32"
     template:
       metadata:
         labels: {}
