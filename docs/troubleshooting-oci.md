@@ -160,10 +160,35 @@ Failed to pull image "ghcr.io/startappdev/karpenter:..."
 ### 7. OCI API Rate Limiting
 
 **Symptoms:**
-- Slow provisioning
-- 429 errors in logs
+- HTTP 429 "TooManyRequests" errors in logs
+- Slow provisioning or termination
+- Failed pod scheduling due to instance type discovery
 
-**Solution:**
+**Solutions:**
+
+#### Availability Domain Rate Limiting
+**Error:**
+```
+HTTP 429 on /availabilityDomains endpoint
+```
+
+**Fixed in v0.1.42+:**
+- Automatic caching with 1-hour TTL
+- Request deduplication to prevent concurrent calls
+- Exponential backoff with jitter
+
+#### TerminateInstance Rate Limiting  
+**Error:**
+```
+Error returned by Compute Service. Http Status Code: 429. Error Code: TooManyRequests.
+```
+
+**Fixed in v0.1.42+:**
+- Two-tier retry approach (3 attempts, then 8 attempts with extended backoff)
+- Up to 120-second delays for severe rate limiting
+- Automatic rate limit detection and escalation
+
+#### Manual Mitigation (if needed):
 1. Check Karpenter's batching settings:
    ```yaml
    settings:
@@ -171,8 +196,41 @@ Failed to pull image "ghcr.io/startappdev/karpenter:..."
      batchIdleDuration: 1s
    ```
 
-2. Implement exponential backoff in OCI provider code
+2. Monitor retry attempts:
+   ```bash
+   kubectl logs -n karpenter deployment/karpenter-karpenter-oci | grep "retryable error"
+   ```
+
 3. Consider using multiple compartments for load distribution
+
+### 8. Cost Optimization and Over-Provisioning
+
+**Symptoms:**
+- Very expensive nodes (VM.DenseIO2.16, VM.Optimized, etc.)
+- Nodes much larger than needed for workload
+- High cloud costs
+
+**Solutions (Fixed in v0.1.40+):**
+
+#### Shape Filtering
+Karpenter now automatically:
+- Blocks expensive shape families (DenseIO, Optimized, GPU, HPC, Bare Metal)
+- Only allows cost-effective E4.Flex and E5.Flex shapes
+- Blocks ARM shapes (A1, A2) incompatible with x86 images
+
+#### Right-Sizing
+- Multiple CPU/memory ratios (4GB, 6GB, 8GB, 10GB, 16GB per OCPU)
+- Configurations optimized for various workload patterns
+- Automatic selection of minimal viable shape
+
+**Verification:**
+```bash
+# Check only E4/E5 shapes are used
+kubectl get nodes -l karpenter.sh/nodepool --show-labels | grep "VM.Standard.E"
+
+# Monitor cost savings
+kubectl top nodes | grep karpenter
+```
 
 ## Debug Commands Cheatsheet
 
