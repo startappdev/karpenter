@@ -47,6 +47,22 @@ type AvailabilityDomainCache struct {
 	ttl       time.Duration
 }
 
+// CircuitBreaker prevents API storms when rate limiting is detected
+type CircuitBreaker struct {
+	isOpen             bool
+	lastRateLimitTime  time.Time
+	rateLimitCount     int
+	cooldownDuration   time.Duration
+	maxRateLimitCount  int
+	mutex              sync.RWMutex
+}
+
+// TerminationCoordinator limits concurrent termination operations
+type TerminationCoordinator struct {
+	semaphore chan struct{}
+	mutex     sync.Mutex
+}
+
 // Client wraps OCI API operations
 type Client struct {
 	config               *Config
@@ -55,6 +71,8 @@ type Client struct {
 	configProvider       common.ConfigurationProvider
 	adCache              *AvailabilityDomainCache
 	requestDeduplicator  *RequestDeduplicator
+	circuitBreaker       *CircuitBreaker
+	terminationCoordinator *TerminationCoordinator
 }
 
 // RequestDeduplicator prevents concurrent identical requests
@@ -139,7 +157,106 @@ func NewClient(config *Config) (*Client, error) {
 		requestDeduplicator: &RequestDeduplicator{
 			inflight: make(map[string]chan result),
 		},
+		circuitBreaker: &CircuitBreaker{
+			cooldownDuration:  15 * time.Minute, // 15 minute cooldown after rate limiting
+			maxRateLimitCount: 5,                 // Trip circuit after 5 rate limit errors
+		},
+		terminationCoordinator: &TerminationCoordinator{
+			semaphore: make(chan struct{}, 2), // Max 2 concurrent terminations
+		},
 	}, nil
+}
+
+// checkCircuitBreaker returns true if circuit is open (should not attempt operations)
+func (c *Client) checkCircuitBreaker(ctx context.Context) bool {
+	c.circuitBreaker.mutex.RLock()
+	defer c.circuitBreaker.mutex.RUnlock()
+	
+	if !c.circuitBreaker.isOpen {
+		return false
+	}
+	
+	// Check if cooldown period has passed
+	if time.Since(c.circuitBreaker.lastRateLimitTime) > c.circuitBreaker.cooldownDuration {
+		// Circuit can be closed - will be done in tripCircuitBreaker reset
+		return false
+	}
+	
+	logger := log.FromContext(ctx)
+	logger.Info("circuit breaker is open, blocking operation due to recent rate limiting",
+		"lastRateLimitTime", c.circuitBreaker.lastRateLimitTime,
+		"cooldownDuration", c.circuitBreaker.cooldownDuration)
+	return true
+}
+
+// recordRateLimitError records a rate limit error and potentially trips the circuit breaker
+func (c *Client) recordRateLimitError(ctx context.Context) {
+	c.circuitBreaker.mutex.Lock()
+	defer c.circuitBreaker.mutex.Unlock()
+	
+	c.circuitBreaker.lastRateLimitTime = time.Now()
+	c.circuitBreaker.rateLimitCount++
+	
+	logger := log.FromContext(ctx)
+	
+	if c.circuitBreaker.rateLimitCount >= c.circuitBreaker.maxRateLimitCount && !c.circuitBreaker.isOpen {
+		c.circuitBreaker.isOpen = true
+		logger.Error(fmt.Errorf("circuit breaker tripped due to repeated rate limiting"), 
+			"circuit breaker opened",
+			"rateLimitCount", c.circuitBreaker.rateLimitCount,
+			"maxRateLimitCount", c.circuitBreaker.maxRateLimitCount,
+			"cooldownDuration", c.circuitBreaker.cooldownDuration)
+	} else {
+		logger.Info("rate limit error recorded",
+			"rateLimitCount", c.circuitBreaker.rateLimitCount,
+			"maxRateLimitCount", c.circuitBreaker.maxRateLimitCount,
+			"circuitOpen", c.circuitBreaker.isOpen)
+	}
+}
+
+// resetCircuitBreaker resets the circuit breaker after cooldown period
+func (c *Client) resetCircuitBreaker(ctx context.Context) {
+	c.circuitBreaker.mutex.Lock()
+	defer c.circuitBreaker.mutex.Unlock()
+	
+	if c.circuitBreaker.isOpen && time.Since(c.circuitBreaker.lastRateLimitTime) > c.circuitBreaker.cooldownDuration {
+		c.circuitBreaker.isOpen = false
+		c.circuitBreaker.rateLimitCount = 0
+		
+		logger := log.FromContext(ctx)
+		logger.Info("circuit breaker reset after cooldown period", 
+			"cooldownDuration", c.circuitBreaker.cooldownDuration)
+	}
+}
+
+// acquireTerminationSlot acquires a slot for termination operations
+func (c *Client) acquireTerminationSlot(ctx context.Context) error {
+	logger := log.FromContext(ctx)
+	logger.V(1).Info("acquiring termination slot", "maxConcurrent", cap(c.terminationCoordinator.semaphore))
+	
+	select {
+	case c.terminationCoordinator.semaphore <- struct{}{}:
+		logger.V(1).Info("termination slot acquired")
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-time.After(5 * time.Minute): // Timeout after 5 minutes
+		return fmt.Errorf("timeout waiting for termination slot")
+	}
+}
+
+// releaseTerminationSlot releases a termination slot
+func (c *Client) releaseTerminationSlot(ctx context.Context) {
+	logger := log.FromContext(ctx)
+	logger.V(1).Info("releasing termination slot")
+	
+	select {
+	case <-c.terminationCoordinator.semaphore:
+		logger.V(1).Info("termination slot released")
+	default:
+		// Semaphore already empty, this shouldn't happen but handle gracefully
+		logger.Info("attempted to release termination slot but semaphore was already empty")
+	}
 }
 
 // LaunchInstance launches a standard instance with fixed shape
@@ -380,13 +497,32 @@ func (c *Client) LaunchFlexibleInstance(ctx context.Context, nodeClaim *v1.NodeC
 	return instance, nil
 }
 
-// TerminateInstance terminates an instance
+// TerminateInstance terminates an instance with circuit breaker and rate limiting protection
 func (c *Client) TerminateInstance(ctx context.Context, instanceID string) error {
 	logger := log.FromContext(ctx)
-	logger.Info("terminating OCI instance", "instanceID", instanceID)
+	logger.Info("terminating OCI instance with rate limiting protection", "instanceID", instanceID)
 
-	// First attempt with default retry config
-	err := WithRetry(ctx, DefaultRetryConfig(), "terminate-instance", func() error {
+	// Check circuit breaker first - if open, immediately fail
+	if c.checkCircuitBreaker(ctx) {
+		return fmt.Errorf("circuit breaker is open due to rate limiting, termination blocked for instance %s", instanceID)
+	}
+
+	// Reset circuit breaker if cooldown period has passed
+	c.resetCircuitBreaker(ctx)
+
+	// Acquire termination slot to limit concurrent operations
+	err := c.acquireTerminationSlot(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to acquire termination slot: %w", err)
+	}
+	defer c.releaseTerminationSlot(ctx)
+
+	// Add inter-termination delay to prevent API storms
+	logger.Info("applying inter-termination delay to prevent API storms")
+	time.Sleep(10 * time.Second)
+
+	// First attempt with conservative retry config
+	err = WithRetry(ctx, DefaultRetryConfig(), "terminate-instance", func() error {
 		request := core.TerminateInstanceRequest{
 			InstanceId:         &instanceID,
 			PreserveBootVolume: common.Bool(false),
@@ -394,16 +530,27 @@ func (c *Client) TerminateInstance(ctx context.Context, instanceID string) error
 
 		_, err := c.computeClient.TerminateInstance(ctx, request)
 		if err != nil {
-			return WrapOCIError(err, "instance")
+			wrappedErr := WrapOCIError(err, "instance")
+			
+			// Record rate limit errors for circuit breaker
+			if IsRateLimitError(wrappedErr) {
+				c.recordRateLimitError(ctx)
+			}
+			
+			return wrappedErr
 		}
 
 		return nil
 	})
 
-	// If first attempt failed with rate limiting, retry with more aggressive backoff
+	// If first attempt failed with rate limiting, retry with much more aggressive backoff
 	if err != nil && IsRateLimitError(err) {
-		logger.Info("initial terminate attempt hit rate limit, retrying with extended backoff", 
+		logger.Info("initial terminate attempt hit rate limit, retrying with extended backoff after additional delay", 
 			"instanceID", instanceID, "error", err)
+		
+		// Additional delay before extended retry
+		logger.Info("applying additional delay before extended rate-limit retry")
+		time.Sleep(30 * time.Second)
 			
 		return WithRetry(ctx, RateLimitRetryConfig(), "terminate-instance-rate-limited", func() error {
 			request := core.TerminateInstanceRequest{
@@ -413,7 +560,14 @@ func (c *Client) TerminateInstance(ctx context.Context, instanceID string) error
 
 			_, err := c.computeClient.TerminateInstance(ctx, request)
 			if err != nil {
-				return WrapOCIError(err, "instance")
+				wrappedErr := WrapOCIError(err, "instance")
+				
+				// Record rate limit errors for circuit breaker
+				if IsRateLimitError(wrappedErr) {
+					c.recordRateLimitError(ctx)
+				}
+				
+				return wrappedErr
 			}
 
 			return nil

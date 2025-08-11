@@ -48,20 +48,20 @@ type RetryConfig struct {
 // DefaultRetryConfig returns the default retry configuration
 func DefaultRetryConfig() RetryConfig {
 	return RetryConfig{
-		MaxAttempts:  3,
-		InitialDelay: 1 * time.Second,
-		MaxDelay:     30 * time.Second,
-		Factor:       2.0,
+		MaxAttempts:  2,                // Reduced attempts to prevent API storms
+		InitialDelay: 5 * time.Second,  // Much longer initial delay
+		MaxDelay:     60 * time.Second, // Longer max delay
+		Factor:       3.0,              // More aggressive backoff
 	}
 }
 
 // RateLimitRetryConfig returns a retry configuration optimized for rate limiting scenarios
 func RateLimitRetryConfig() RetryConfig {
 	return RetryConfig{
-		MaxAttempts:  8,                // More attempts for rate limiting
-		InitialDelay: 2 * time.Second,  // Start with longer delay
-		MaxDelay:     120 * time.Second, // Much longer max delay for severe rate limiting
-		Factor:       2.5,              // More aggressive backoff
+		MaxAttempts:  3,                 // Significantly reduced attempts
+		InitialDelay: 30 * time.Second,  // Much longer initial delay to let rate limiting cool down
+		MaxDelay:     600 * time.Second, // 10 minute max delay for severe rate limiting
+		Factor:       4.0,               // Very aggressive backoff
 	}
 }
 
