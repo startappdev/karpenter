@@ -1,0 +1,53 @@
+apiVersion: karpenter.sh/v1
+kind: NodePool
+metadata:
+  name: production-pool
+  namespace: karpenter
+spec:
+  # Template for Production workloads  
+  template:
+    metadata:
+      labels:
+        node_pool: start_io_dsp_rtb
+        workload-type: production
+        cost-optimization: enabled
+      annotations:
+        karpenter.sh/nodepool-type: "production-workloads"
+    spec:
+      # Architecture and OS requirements
+      requirements:
+        - key: kubernetes.io/arch
+          operator: In
+          values: ["amd64"]
+        - key: kubernetes.io/os
+          operator: In
+          values: ["linux"]
+        # Cost-effective shapes are automatically selected by OCI provider
+      
+      # Production-specific taints for workload isolation
+      taints:
+        - key: node_pool
+          value: start_io_dsp_rtb
+          effect: NoSchedule
+      
+      # Reference to OCI NodeClass
+      nodeClassRef:
+        group: karpenter.sh
+        kind: OCINodeClass
+        name: default
+      
+      # Longer expiration for production stability
+      expireAfter: 72h
+  
+  # No resource limits - let OCI cost optimization handle shape selection
+  # Production pods need: 24.4 CPUs + 28.5GB memory - OCI provider will right-size
+  # limits:
+  #   cpu: "1000"     # Remove limits to allow OCI provider shape selection
+  #   memory: "4000Gi" # Let cost-optimized shapes be selected dynamically
+  
+  # Disruption settings for production stability
+  disruption:
+    consolidationPolicy: WhenEmpty
+    consolidateAfter: 5m  # Longer wait for production stability
+    budgets:
+      - nodes: "5%"   # Conservative disruption for production

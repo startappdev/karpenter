@@ -1,0 +1,54 @@
+apiVersion: karpenter.sh/v1
+kind: NodePool
+metadata:
+  name: default-pool
+  namespace: karpenter
+spec:
+  # Template for Default/Test workloads
+  template:
+    metadata:
+      labels:
+        shape-family: e5
+        node-type: flexible-e5
+        workload-type: default
+        cost-optimization: enabled
+      annotations:
+        karpenter.sh/nodepool-type: "default-workloads"
+    spec:
+      # Architecture and OS requirements
+      requirements:
+        - key: kubernetes.io/arch
+          operator: In
+          values: ["amd64"]
+        - key: kubernetes.io/os
+          operator: In
+          values: ["linux"]
+        # Cost-effective shapes are automatically selected by OCI provider
+      
+      # Default workload taints for isolation
+      taints:
+        - key: node-type
+          value: flexible-e5
+          effect: NoSchedule
+      
+      # Reference to OCI NodeClass
+      nodeClassRef:
+        group: karpenter.sh
+        kind: OCINodeClass
+        name: default
+      
+      # Short expiration for cost optimization in test environments
+      expireAfter: 12h
+  
+  # No resource limits - let OCI cost optimization handle shape selection
+  # Default pods need: 8 CPUs + 16GB memory - OCI provider will right-size
+  # limits:
+  #   cpu: "1000"     # Remove limits to allow OCI provider shape selection
+  #   memory: "4000Gi" # Let cost-optimized shapes be selected dynamically
+  
+  # Aggressive disruption settings for cost optimization
+  disruption:
+    consolidationPolicy: WhenEmpty
+    consolidateAfter: 15s  # Quick consolidation for test environments
+    budgets:
+      - nodes: "20%"  # More aggressive for non-production
