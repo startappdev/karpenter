@@ -22,7 +22,14 @@ spec:
         - key: kubernetes.io/os
           operator: In
           values: ["linux"]
-        # Cost-effective shapes are automatically selected by OCI provider
+        # Ensure larger flexible shapes for high-resource production workloads
+        - key: node.kubernetes.io/instance-type
+          operator: In
+          values: ["VM.Standard.E4.Flex", "VM.Standard.E5.Flex"]
+        # Force larger flexible shapes by requiring minimum CPU capacity
+        - key: karpenter.sh/capacity-type
+          operator: In
+          values: ["on-demand"]
       
       # Production-specific taints for workload isolation
       taints:
@@ -39,15 +46,16 @@ spec:
       # Longer expiration for production stability
       expireAfter: 72h
   
-  # No resource limits - let OCI cost optimization handle shape selection
-  # Production pods need: 24.4 CPUs + 28.5GB memory - OCI provider will right-size
-  # limits:
-  #   cpu: "1000"     # Remove limits to allow OCI provider shape selection
-  #   memory: "4000Gi" # Let cost-optimized shapes be selected dynamically
+  # Resource limits to ensure large enough nodes for production workloads
+  # Production pods need: ~25 CPUs + ~30GB memory per pod (including linkerd proxy + maxmind)
+  # Force larger flexible shapes by setting high limits that will trigger right-sizing
+  limits:
+    cpu: "1000"      # Very high limit to force larger flexible shapes
+    memory: "4000Gi" # Very high limit to allow OCI to choose optimal shape size
   
-  # Disruption settings for production stability
+  # DISABLED: Temporarily disable all disruption to prevent OCI 429 rate limiting
   disruption:
-    consolidationPolicy: WhenEmpty
-    consolidateAfter: 5m  # Longer wait for production stability
+    consolidationPolicy: WhenEmpty  # Only consolidate completely empty nodes
+    consolidateAfter: Never  # Disable automatic consolidation entirely
     budgets:
-      - nodes: "5%"   # Conservative disruption for production
+      - nodes: "0"   # Zero disruption budget - manual cleanup only

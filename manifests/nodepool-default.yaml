@@ -46,9 +46,9 @@ spec:
   #   cpu: "1000"     # Remove limits to allow OCI provider shape selection
   #   memory: "4000Gi" # Let cost-optimized shapes be selected dynamically
   
-  # Aggressive disruption settings for cost optimization
+  # DISABLED: Temporarily disable all disruption to prevent OCI 429 rate limiting
   disruption:
-    consolidationPolicy: WhenEmpty
-    consolidateAfter: 15s  # Quick consolidation for test environments
+    consolidationPolicy: WhenEmpty  # More conservative - only empty nodes  
+    consolidateAfter: Never  # Disable automatic consolidation entirely
     budgets:
-      - nodes: "20%"  # More aggressive for non-production
+      - nodes: "0"   # Zero disruption budget - manual cleanup only

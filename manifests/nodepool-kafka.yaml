@@ -27,6 +27,7 @@ spec:
       # Kafka-specific taints for workload isolation
       taints:
         - key: kafka
+          value: "true"
           effect: NoSchedule
       
       # Reference to OCI NodeClass
@@ -43,9 +44,9 @@ spec:
   #   cpu: "1000"     # Remove limits to allow OCI provider shape selection 
   #   memory: "4000Gi" # Let cost-optimized shapes be selected dynamically
   
-  # Disruption settings for cost optimization
+  # DISABLED: Temporarily disable all disruption to prevent OCI 429 rate limiting  
   disruption:
-    consolidationPolicy: WhenEmpty
-    consolidateAfter: 30s
+    consolidationPolicy: WhenEmpty  # Conservative - only empty nodes
+    consolidateAfter: Never  # Disable automatic consolidation entirely
     budgets:
-      - nodes: "10%"
+      - nodes: "0"   # Zero disruption budget - manual cleanup only
