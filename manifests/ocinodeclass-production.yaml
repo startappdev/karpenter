@@ -1,0 +1,20 @@
+apiVersion: karpenter.sh/v1alpha1
+kind: OCINodeClass
+metadata:
+  name: production-high-resource
+spec:
+  # Use high-resource E5 flexible shapes for production workloads
+  shape: VM.Standard.E5.Flex  # E5 instances may have larger default sizing
+  
+  # Same image and networking as default nodeclass
+  imageId: "ocid1.image.oc1.iad.aaaaaaaaug6zsgyvt52ybxifdiitp6ywrudnlbxsaclurlla3zkw4umchbha"
+  subnetIds:
+    - "ocid1.subnet.oc1.iad.aaaaaaaaznwweno45m7klssbzt2kyl6qa4ec34335patiolemkti6d4ioita"
+    - "ocid1.subnet.oc1.iad.aaaaaaaau6uekgrdd446pvmqt3zfhwkpnncn2jytqwlhokurxb54mnh46tca"
+  
+  # Tags for resource management
+  tags:
+    cluster: "oke-cluster"
+    managed-by: "karpenter"
+    workload-type: "production-high-resource"
+    cost-optimization: "right-sizing"
