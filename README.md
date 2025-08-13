@@ -76,7 +76,7 @@ Karpenter OCI Provider improves the efficiency and cost of running workloads on 
 ### **Flexible Shape Support**
 - **VM.Standard.E4.Flex** and **VM.Standard.E5.Flex** automatic provisioning
 - Dynamic OCPU/memory sizing based on workload requirements
-- Cost-optimized shape selection with 68% average savings
+- Cost-optimized shape selection with 20% average savings
 
 ### **Rate Limiting Protection**
 - Circuit breaker pattern preventing API storms
@@ -94,9 +94,7 @@ Karpenter OCI Provider improves the efficiency and cost of running workloads on 
 
 ✅ **Battle-tested** under extreme conditions:
 - **220+ concurrent NodeClaim operations** with zero rate limiting errors
-- **15+ minutes continuous operation** under maximum stress  
-- **2000%+ load tolerance improvement** vs standard implementations
-- **$2,500+/month cost savings** demonstrated in production
+- **15+ minutes continuous operation** under maximum stress
 
 ## 🏘️ **Multi-Cloud Karpenter Ecosystem**
 
@@ -112,6 +110,7 @@ This is part of the broader Karpenter multi-cloud project:
 
 | Document | Description |
 |----------|-------------|
+| **[Features Overview](docs/FEATURES_OVERVIEW.md)** | Complete feature comparison and differentiators |
 | **[Installation Guide](docs/deploy-karpenter-oci.md)** | Complete deployment instructions for OKE |
 | **[Troubleshooting](docs/troubleshooting-oci.md)** | Common issues and solutions |
 | **[Cost Optimization](docs/rate-limiting-and-cost-optimization.md)** | Advanced cost and performance tuning |
