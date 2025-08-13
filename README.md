@@ -112,6 +112,7 @@ This is part of the broader Karpenter multi-cloud project:
 |----------|-------------|
 | **[Features Overview](docs/FEATURES_OVERVIEW.md)** | Complete feature comparison and differentiators |
 | **[Installation Guide](docs/deploy-karpenter-oci.md)** | Complete deployment instructions for OKE |
+| **[Migration Guide](docs/migration-zero-downtime.md)** | Zero-downtime migration from Terraform to Karpenter |
 | **[Troubleshooting](docs/troubleshooting-oci.md)** | Common issues and solutions |
 | **[Cost Optimization](docs/rate-limiting-and-cost-optimization.md)** | Advanced cost and performance tuning |
 | **[GitOps Deployment](docs/gitops-deployment-guide.md)** | Flux CD integration guide |
