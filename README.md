@@ -167,10 +167,4 @@ This project follows the [Kubernetes Code of Conduct](code-of-conduct.md). By pa
 
 ---
 
-## ⭐ **Star History**
-
-[![Star History Chart](https://api.star-history.com/svg?repos=startappdev/karpenter&type=Date)](https://star-history.com/#startappdev/karpenter&Date)
-
----
-
 **Ready to optimize your OKE clusters?** [Get Started Now](docs/deploy-karpenter-oci.md) 🚀
