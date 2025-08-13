@@ -536,7 +536,6 @@ The **start.io Karpenter OCI Provider** represents a **complete evolution** from
 - **🎯 From Static → Dynamic**: Intelligent, real-time provisioning
 - **💰 From Wasteful → Optimized**: 20% cost reduction proven
 - **🛡️ From Fragile → Bulletproof**: 100% rate limiting elimination  
-- **📈 From Limited → Scalable**: 2000%+ capacity improvement
 - **🚀 From Experimental → Production**: Enterprise-grade reliability
 
 **Ready to transform your OKE cluster management?** Start with our [Quick Start Guide](../README.md#quick-start) and experience the future of Kubernetes autoscaling on Oracle Cloud Infrastructure.
