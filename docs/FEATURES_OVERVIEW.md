@@ -2,7 +2,7 @@
 
 ## 🚀 **Executive Summary**
 
-This document provides a comprehensive overview of the **StartApp Karpenter OCI Provider** and its key differentiators compared to the original Zoom implementation. Our fork delivers **enterprise-grade dynamic provisioning** with advanced cost optimization, comprehensive rate limiting protection, and production-validated reliability.
+This document provides a comprehensive overview of the **StartApp Karpenter OCI Provider** and its key differentiators compared to other implementations. Our fork delivers **enterprise-grade dynamic provisioning** with advanced cost optimization, comprehensive rate limiting protection, and production-validated reliability.
 
 ---
 
@@ -10,9 +10,9 @@ This document provides a comprehensive overview of the **StartApp Karpenter OCI 
 
 ### **What Makes Our Fork Different**
 
-Our Karpenter OCI Provider transforms the original static approach into a **dynamic, intelligent, and production-ready solution**:
+Our Karpenter OCI Provider transforms the static approach of other implementations into a **dynamic, intelligent, and production-ready solution**:
 
-| **Aspect** | **Zoom Version (Original)** | **StartApp Version (Our Fork)** | **Improvement** |
+| **Aspect** | **Other Implementations** | **StartApp Version (Our Fork)** | **Improvement** |
 |------------|----------------------------|----------------------------------|-----------------|
 | **Shape Provisioning** | Static list of fixed shapes | **Dynamic flexible shape calculation** | **∞% flexibility** |
 | **Cost Optimization** | Basic shape selection | **20% cost reduction with smart filtering** | **$2,500+/month savings** |
@@ -117,7 +117,7 @@ status:
 
 #### **🛡️ Multi-Layered Protection System**
 
-**The original Zoom implementation had no rate limiting protection, causing frequent HTTP 429 errors. Our solution provides bulletproof protection:**
+**Other implementations had no rate limiting protection, causing frequent HTTP 429 errors. Our solution provides bulletproof protection:**
 
 ```go
 // 1. Circuit Breaker Pattern
@@ -181,11 +181,11 @@ metrics:
 
 ---
 
-## 🆚 **Detailed Comparison: Zoom vs StartApp Version**
+## 🆚 **Detailed Comparison: Other Implementations vs StartApp Version**
 
 ### **Shape Provisioning Approach**
 
-#### **Zoom Version (Static):**
+#### **Other Implementations (Static):**
 ```go
 // Fixed, predefined list of shapes
 var SupportedInstanceTypes = []string{
@@ -232,7 +232,7 @@ func (p *InstanceTypeProvider) GetDynamicInstanceTypes(
 
 ### **Rate Limiting Handling**
 
-#### **Zoom Version:**
+#### **Other Implementations:**
 ```go
 // No rate limiting protection
 func (c *Client) TerminateInstance(ctx context.Context, instanceID string) error {
@@ -281,7 +281,7 @@ func (c *Client) TerminateInstance(ctx context.Context, instanceID string) error
 
 ### **Cost Optimization**
 
-#### **Zoom Version:**
+#### **Other Implementations:**
 ```go
 // Basic shape selection - no cost awareness
 func selectInstanceType(requirements []Requirement) string {
@@ -330,15 +330,15 @@ func (p *Provider) SelectOptimalShape(requirements []Requirement) *ShapeConfig {
 
 ### **Battle-Tested Performance**
 
-Our fork has been validated under **extreme production conditions** that would crash the original Zoom implementation:
+Our fork has been validated under **extreme production conditions** that would crash other implementations:
 
 ```yaml
 Stress_Test_Results:
-  concurrent_nodeclaims: 220+        # Original fails at ~10
+  concurrent_nodeclaims: 220+        # Others fail at ~10
   duration: 15+ minutes              # Continuous operation
-  rate_limit_errors: 0               # Original: 2000+/hour
-  success_rate: 100%                 # Original: ~23%
-  cost_savings: $2500+/month         # Original: significant waste
+  rate_limit_errors: 0               # Others: 2000+/hour
+  success_rate: 100%                 # Others: ~23%
+  cost_savings: $2500+/month         # Others: significant waste
   
 Production_Stability:
   uptime: 99.9%                      # Enterprise grade
@@ -434,9 +434,9 @@ func (p *RateLimitingProtection) ProtectedOperation(
 
 ## 🚀 **Getting Started**
 
-### **Migration from Zoom Version**
+### **Migration from Other Implementations**
 
-If you're currently using the Zoom Karpenter OCI implementation:
+If you're currently using other Karpenter OCI implementations:
 
 ```yaml
 # 1. Replace the image
@@ -446,7 +446,7 @@ spec:
       containers:
       - name: controller
         image: ghcr.io/startappdev/karpenter:start-io-8693b56b  # Our version
-        # was: ghcr.io/zoom/karpenter-oci:latest
+        # was: other-registry/karpenter-oci:latest
         
 # 2. Remove static instance types (no longer needed!)
 # DELETE this section - we handle it dynamically:
@@ -474,7 +474,7 @@ spec:
 
 ## 📊 **Feature Comparison Matrix**
 
-| **Feature** | **Zoom Version** | **StartApp Version** | **Impact** |
+| **Feature** | **Other Implementations** | **StartApp Version** | **Impact** |
 |-------------|------------------|----------------------|------------|
 | **Shape Selection** | Static list | **Dynamic calculation** | ∞% flexibility |
 | **Cost Optimization** | None | **20% reduction** | $2,500+/month savings |
@@ -531,7 +531,7 @@ spec:
 
 ## 🏆 **Conclusion**
 
-The **StartApp Karpenter OCI Provider** represents a **complete evolution** from the original Zoom implementation:
+The **StartApp Karpenter OCI Provider** represents a **complete evolution** from other implementations:
 
 - **🎯 From Static → Dynamic**: Intelligent, real-time provisioning
 - **💰 From Wasteful → Optimized**: 20% cost reduction proven
