@@ -15,9 +15,8 @@ Karpenter OCI Provider brings the power of Karpenter's intelligent node provisio
 ## 🚀 **Key Features**
 
 * **🎯 Dynamic Flexible Shape Provisioning** - Automatically selects optimal OCPU/memory configurations
-* **💰 Cost Optimization** - Smart shape filtering and right-sizing for up to 68% cost reduction  
+* **💰 Cost Optimization** - Smart shape filtering and right-sizing for up to 20% cost reduction  
 * **🛡️ Comprehensive Rate Limiting Protection** - Multi-layered safeguards eliminating OCI API rate limits
-* **⚡ High Performance** - 2000%+ load tolerance improvement with bulletproof reliability
 * **🔐 Enterprise Security** - Instance principal authentication and sealed secrets support
 * **📊 Advanced Monitoring** - Complete observability with metrics and detailed logging
 
