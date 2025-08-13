@@ -46,16 +46,14 @@ spec:
       # Longer expiration for production stability
       expireAfter: 72h
   
-  # Resource limits to ensure large enough nodes for production workloads
-  # Production pods need: ~25 CPUs + ~30GB memory per pod (including linkerd proxy + maxmind)
-  # Force larger flexible shapes by setting high limits that will trigger right-sizing
+  # COST REDUCTION: Scale down to 0 nodes
   limits:
-    cpu: "1000"      # Very high limit to force larger flexible shapes
-    memory: "4000Gi" # Very high limit to allow OCI to choose optimal shape size
+    cpu: "0"      # Scale down to 0 nodes
+    memory: "0Gi" # Scale down to 0 nodes
   
-  # DISABLED: Temporarily disable all disruption to prevent OCI 429 rate limiting
+  # COST REDUCTION: Enable aggressive consolidation to terminate all nodes
   disruption:
-    consolidationPolicy: WhenEmpty  # Only consolidate completely empty nodes
-    consolidateAfter: Never  # Disable automatic consolidation entirely
+    consolidationPolicy: WhenEmpty  # Consolidate empty nodes
+    consolidateAfter: 1s  # Immediately consolidate
     budgets:
-      - nodes: "0"   # Zero disruption budget - manual cleanup only
+      - nodes: "100%"   # Allow all nodes to be terminated

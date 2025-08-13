@@ -40,15 +40,14 @@ spec:
       # Short expiration for cost optimization in test environments
       expireAfter: 12h
   
-  # No resource limits - let OCI cost optimization handle shape selection
-  # Default pods need: 8 CPUs + 16GB memory - OCI provider will right-size
-  # limits:
-  #   cpu: "1000"     # Remove limits to allow OCI provider shape selection
-  #   memory: "4000Gi" # Let cost-optimized shapes be selected dynamically
+  # COST REDUCTION: Scale down to 0 nodes
+  limits:
+    cpu: "0"      # Scale down to 0 nodes
+    memory: "0Gi" # Scale down to 0 nodes
   
-  # DISABLED: Temporarily disable all disruption to prevent OCI 429 rate limiting
+  # COST REDUCTION: Enable aggressive consolidation to terminate all nodes
   disruption:
-    consolidationPolicy: WhenEmpty  # More conservative - only empty nodes  
-    consolidateAfter: Never  # Disable automatic consolidation entirely
+    consolidationPolicy: WhenEmpty  # Consolidate empty nodes
+    consolidateAfter: 1s  # Immediately consolidate
     budgets:
-      - nodes: "0"   # Zero disruption budget - manual cleanup only
+      - nodes: "100%"   # Allow all nodes to be terminated
