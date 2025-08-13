@@ -221,17 +221,17 @@ nodePools:
   # -- Enable creation of default NodePools
   enabled: false
   
-  # Grafana Agent NodePool configuration
+  # Grafana Agent NodePool configuration - DISABLED FOR COST REDUCTION
   grafanaAgent:
-    # -- Enable grafana-agent NodePool
-    enabled: true
+    # -- Enable grafana-agent NodePool (DISABLED)
+    enabled: false
     disruption:
-      consolidateAfter: "30s"
+      consolidateAfter: "1s"
       consolidationPolicy: "WhenEmpty"
       budgets:
-      - nodes: "10%"
+      - nodes: "100%"
     limits:
-      cpu: "64"
+      cpu: "0"
     template:
       metadata:
         labels: {}
